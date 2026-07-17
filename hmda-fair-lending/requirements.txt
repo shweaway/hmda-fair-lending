@@ -1,0 +1,6 @@
+duckdb>=1.0
+pandas>=2.2
+numpy>=1.24
+requests>=2.28
+openpyxl>=3.1
+matplotlib>=3.7
