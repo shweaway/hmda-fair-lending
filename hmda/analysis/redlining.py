@@ -43,6 +43,7 @@ def run(conn, engine: str, year: int) -> dict[str, pd.DataFrame]:
                SUM(l.loan_amount_n * l.is_originated) AS orig_volume
         FROM lar l JOIN tracts t ON l.tract11 = t.tract11
         WHERE l.activity_year = ? AND {DEC}
+              AND t.minority_band IS NOT NULL
         GROUP BY t.minority_band ORDER BY t.minority_band""", y)
     band["Denial rate %"] = (100 * band.denials / band.apps).round(2)
     out["volume_by_minority_band"] = band.rename(columns={
@@ -54,6 +55,7 @@ def run(conn, engine: str, year: int) -> dict[str, pd.DataFrame]:
                SUM(l.is_originated) AS originations
         FROM lar l JOIN tracts t ON l.tract11 = t.tract11
         WHERE l.activity_year = ? AND {DEC}
+              AND t.income_quintile_state IS NOT NULL
         GROUP BY t.income_quintile_state ORDER BY quintile""", y)
     inc["Denial rate %"] = (100 * inc.denials / inc.apps).round(2)
     out["volume_by_income_quintile"] = inc.rename(columns={
@@ -123,20 +125,26 @@ def run(conn, engine: str, year: int) -> dict[str, pd.DataFrame]:
     rows = []
     for county, r in piv.iterrows():
         try:
-            wr = r[("denials", "white")] / r[("apps", "white")]
-        except (KeyError, ZeroDivisionError):
+            wa, wd = r[("apps", "white")], r[("denials", "white")]
+        except KeyError:
             continue
+        if pd.isna(wa) or pd.isna(wd) or wa <= 0 or wd <= 0:
+            continue  # no (or no denied) White apps in county: no benchmark
+        wr = wd / wa
         for g in ("black", "hispanic"):
             try:
-                gr = r[("denials", g)] / r[("apps", g)]
-                n = int(r[("apps", g)])
-            except (KeyError, ZeroDivisionError):
+                ga, gd = r[("apps", g)], r[("denials", g)]
+            except KeyError:
                 continue
-            if n >= MIN_COUNTY_APPS and wr > 0:
-                rows.append({"County FIPS": county, "Group": g,
-                             "Group denial %": round(100 * gr, 2),
-                             "White denial %": round(100 * wr, 2),
-                             "Ratio": round(gr / wr, 2), "Group apps": n})
+            # counties where a group has no applications leave NaN holes
+            if pd.isna(ga) or pd.isna(gd) or ga < MIN_COUNTY_APPS:
+                continue
+            gr = gd / ga
+            rows.append({"County FIPS": county, "Group": g,
+                         "Group denial %": round(100 * gr, 2),
+                         "White denial %": round(100 * wr, 2),
+                         "Ratio": round(gr / wr, 2),
+                         "Group apps": int(ga)})
     gaps = pd.DataFrame(rows)
     if len(gaps):
         gaps = gaps.sort_values("Ratio", ascending=False).head(100)

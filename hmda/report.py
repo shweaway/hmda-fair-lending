@@ -26,6 +26,18 @@ def write_excel(results: dict[str, dict[str, pd.DataFrame]],
     return out_path
 
 
+def _chart_data(df, label_col, value_cols):
+    """Coerce values numeric, drop rows with missing labels/values, and
+    stringify labels — real data contains None bands that break matplotlib."""
+    d = df.copy()
+    for c in value_cols:
+        d[c] = pd.to_numeric(d[c], errors="coerce")
+    d = d.dropna(subset=[label_col] + list(value_cols))
+    d = d[~d[label_col].astype(str).isin(["nan", "None", ""])]
+    d[label_col] = d[label_col].astype(str)
+    return d
+
+
 def make_charts(results: dict, charts_dir: str | Path) -> list[Path]:
     charts_dir = Path(charts_dir)
     charts_dir.mkdir(parents=True, exist_ok=True)
@@ -35,6 +47,8 @@ def make_charts(results: dict, charts_dir: str | Path) -> list[Path]:
     if d is not None and len(d):
         fig, ax = plt.subplots(figsize=(9, 5))
         sub = d[d["Group"] != "Race/ethnicity not available"]
+        sub = _chart_data(sub, "Group",
+                          ["Denial rate %", "CI low %", "CI high %"])
         ax.barh(sub["Group"], sub["Denial rate %"], color="#33546A")
         ax.errorbar(
             sub["Denial rate %"], range(len(sub)),
@@ -50,8 +64,9 @@ def make_charts(results: dict, charts_dir: str | Path) -> list[Path]:
 
     r = results.get("redlining", {}).get("volume_by_minority_band")
     if r is not None and len(r) and "Denial rate %" in r:
+        r = _chart_data(r, "Tract minority share", ["Denial rate %"])
         fig, ax = plt.subplots(figsize=(8, 4.5))
-        ax.bar(r["Tract minority share"].astype(str), r["Denial rate %"],
+        ax.bar(r["Tract minority share"], r["Denial rate %"],
                color="#33546A")
         ax.set_xlabel("Census tract minority population share")
         ax.set_ylabel("Denial rate (%)")
@@ -64,8 +79,9 @@ def make_charts(results: dict, charts_dir: str | Path) -> list[Path]:
     if v is not None and len(v):
         val_col = [c for c in v.columns if c.startswith("Appraisals below")]
         if val_col:
+            v = _chart_data(v, "Tract minority share", [val_col[0]])
             fig, ax = plt.subplots(figsize=(8, 4.5))
-            ax.bar(v["Tract minority share"].astype(str), v[val_col[0]],
+            ax.bar(v["Tract minority share"], v[val_col[0]],
                    color="#7A5C61")
             ax.set_xlabel("Census tract minority population share")
             ax.set_ylabel("Appraisals below contract price (%)")
@@ -77,9 +93,14 @@ def make_charts(results: dict, charts_dir: str | Path) -> list[Path]:
 
     vt = results.get("valuation", {}).get("undervaluation_trend")
     if vt is not None and len(vt) > 1:
+        vt = vt.copy()
+        for c in vt.columns:
+            vt[c] = pd.to_numeric(vt[c], errors="coerce")
+        vt = vt.dropna(subset=["Year"])
         fig, ax = plt.subplots(figsize=(8, 4.5))
         for col in [c for c in vt.columns if c != "Year"]:
-            ax.plot(vt["Year"], vt[col], marker="o", label=str(col))
+            if vt[col].notna().any():
+                ax.plot(vt["Year"], vt[col], marker="o", label=str(col))
         ax.set_xlabel("Year"); ax.set_ylabel("Below contract (%)")
         ax.set_title("Undervaluation trend by tract minority share")
         ax.legend(fontsize=8)
@@ -91,6 +112,7 @@ def make_charts(results: dict, charts_dir: str | Path) -> list[Path]:
     if pr is not None and len(pr):
         fig, ax = plt.subplots(figsize=(9, 5))
         sub = pr[pr["Group"] != "Race/ethnicity not available"]
+        sub = _chart_data(sub, "Group", ["Median"])
         ax.barh(sub["Group"], sub["Median"], color="#5A7D9A")
         ax.set_xlabel("Median rate spread over APOR (ppt)")
         ax.set_title("Median rate spread by race/ethnicity (reported loans)")

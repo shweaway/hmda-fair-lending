@@ -1,29 +1,24 @@
 """FHFA Uniform Appraisal Dataset (UAD) integration.
 
-Two public sources (URLs verified against fhfa.gov, July 2026):
+Sources (URLs verified against fhfa.gov, July 2026):
+1. UAD Aggregate Statistics (v3.3): long-format CSVs by geography.
+   Enterprise single-family reaches census tract; FHA bottoms out at county.
+2. UAD Appraisal-Level PUF: 5% national samples (Enterprise 2013-2022,
+   FHA 2017-2022).
 
-1. UAD **Aggregate Statistics** (v3.3, Dec 2024): long-format CSVs of
-   appraisal statistics by geography. Enterprise single-family goes down to
-   census tract; FHA single-family bottoms out at county.
-2. UAD **Appraisal-Level PUF**: 5% national random samples of appraisal
-   records. Enterprise v2.1 covers 2013-2022; FHA v1.0 covers 2017-2022.
+Performance notes: the tract-level aggregate file expands to tens of
+millions of rows. The loader therefore (a) keeps only rows relevant to the
+valuation analyses (below-contract / count / median-value series, overall
+characteristic rows, purchase or all purposes) and (b) bulk-inserts via a
+DataFrame when the engine is DuckDB. Progress prints every chunk.
 
-Because FHFA revises file layouts between versions, the loaders are
-header-driven: they normalize column names and locate *concepts* (geoid,
-year, series, value, ...) through alias lists. If a concept can't be found
-the loader stops with a message listing the columns it saw — update
-ALIASES below rather than guessing.
+Loaders are header-driven; if FHFA changes a layout the error lists the
+columns found. Update ALIASES/KEEP_SERIES_RE below rather than guessing.
 
-Tract-vintage caveat: census tract boundaries changed with the 2020
-census. Joins between UAD tract records and the ACS tracts table are exact
-for recent years but noisy for earlier vintages; trend analyses therefore
-prefer UAD's own neighborhood groupings where present.
-
-Tables created:
-  uad_agg  — long format: channel, geolevel, geoid, series, purpose,
-             group_name, group_value, year, quarter, value
-  uad_puf  — appraisal-level records as-loaded (normalized lowercase
-             columns), plus channel
+Tables:
+  uad_agg — channel, geolevel, geoid, series, purpose, group_name,
+            group_value, year, quarter, value
+  uad_puf — appraisal-level rows as-loaded (+ channel column)
 """
 from __future__ import annotations
 
@@ -37,10 +32,6 @@ import requests
 
 HEADERS = {"User-Agent": "hmda-fair-lending-research/1.0 (personal research use)"}
 
-# ---------------------------------------------------------------------------
-# File catalog. If FHFA bumps a version, update these URLs (see
-# https://www.fhfa.gov/data/uad and https://www.fhfa.gov/data/uad/puf).
-# ---------------------------------------------------------------------------
 AGG_FILES = {
     "ent_sf_tract": "https://www.fhfa.gov/sites/default/files/2024-12/UADAggs_ent_sf_tract_v3_3.zip",
     "ent_sf_county": "https://www.fhfa.gov/sites/default/files/2024-12/UADAggs_ent_sf_county_v3_3.zip",
@@ -51,8 +42,6 @@ PUF_FILES = {
     "fha": "https://www.fhfa.gov/document/d/uad-al/fha_uad_puf_combined_v1_0_csv.zip",
 }
 
-# Concept -> candidate normalized column names (checked in order, then by
-# substring). Normalization: lowercase, non-alphanumeric -> underscore.
 AGG_ALIASES = {
     "geoid": ["geoid", "fips", "geography_id", "geo_id", "tract", "county"],
     "geolevel": ["geolevel", "geo_level", "geographylevel", "geography"],
@@ -64,17 +53,24 @@ AGG_ALIASES = {
     "quarter": ["quarter", "qtr", "period"],
     "value": ["value", "estimate", "statistic"],
 }
-
 REQUIRED_AGG = ["geoid", "series", "year", "value"]
+
+# Only these series families are used by the valuation module.
+KEEP_SERIES_RE = re.compile(
+    r"below|contract|count|number|volume|median", re.I)
+# Keep only overall rows (no characteristic split) and purchase/all purpose.
+KEEP_GROUP_RE = re.compile(r"^$|all|total|none", re.I)
+KEEP_PURPOSE_RE = re.compile(r"^$|purchase|all|total", re.I)
+
+AGG_COLS = ["channel", "geolevel", "geoid", "series", "purpose",
+            "group_name", "group_value", "year", "quarter", "value"]
 
 
 def _norm(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
 
 
-def _map_columns(header: list[str], aliases: dict) -> dict:
-    """Return concept -> actual column index, using exact then substring
-    matches on normalized names."""
+def _map_columns(header, aliases):
     normed = [_norm(h) for h in header]
     out = {}
     for concept, cands in aliases.items():
@@ -93,8 +89,7 @@ def _map_columns(header: list[str], aliases: dict) -> dict:
     return out
 
 
-def download(data_dir: str | Path = "data", include_puf: bool = True) -> None:
-    """Fetch the UAD zips (skips files already present)."""
+def download(data_dir="data", include_puf=True):
     dest = Path(data_dir) / "uad"
     dest.mkdir(parents=True, exist_ok=True)
     files = dict(AGG_FILES)
@@ -106,7 +101,7 @@ def download(data_dir: str | Path = "data", include_puf: bool = True) -> None:
         if out.exists() and out.stat().st_size > 0:
             print(f"  {key}: cached")
             continue
-        print(f"  {key}: downloading {url}")
+        print(f"  {key}: downloading {url}", flush=True)
         with s.get(url, headers=HEADERS, timeout=1200, stream=True) as r:
             r.raise_for_status()
             tmp = out.with_suffix(".part")
@@ -117,8 +112,7 @@ def download(data_dir: str | Path = "data", include_puf: bool = True) -> None:
         print(f"  {key}: {out.stat().st_size/1e6:.1f} MB")
 
 
-def _iter_zip_csv(zip_path: Path):
-    """Yield (name, csv.reader) for each CSV inside a zip."""
+def _iter_zip_csv(zip_path):
     with zipfile.ZipFile(zip_path) as z:
         for name in z.namelist():
             if name.lower().endswith(".csv"):
@@ -128,7 +122,22 @@ def _iter_zip_csv(zip_path: Path):
                     yield name, csv.reader(text)
 
 
-def load_aggregates(db_path: str | Path, data_dir: str | Path = "data") -> None:
+def _bulk_insert(conn, engine, table, cols, rows):
+    """Fast path for DuckDB (DataFrame register), executemany for SQLite."""
+    if not rows:
+        return
+    if engine == "duckdb":
+        import pandas as pd
+        df = pd.DataFrame(rows, columns=cols)
+        conn.register("_bulk_tmp", df)
+        conn.execute(f"INSERT INTO {table} SELECT * FROM _bulk_tmp")
+        conn.unregister("_bulk_tmp")
+    else:
+        ph = ", ".join(["?"] * len(cols))
+        conn.executemany(f"INSERT INTO {table} VALUES ({ph})", rows)
+
+
+def load_aggregates(db_path, data_dir="data"):
     from .db import connect
     conn, engine = connect(db_path)
     conn.execute("DROP TABLE IF EXISTS uad_agg")
@@ -136,10 +145,8 @@ def load_aggregates(db_path: str | Path, data_dir: str | Path = "data") -> None:
         "CREATE TABLE uad_agg (channel TEXT, geolevel TEXT, geoid TEXT, "
         "series TEXT, purpose TEXT, group_name TEXT, group_value TEXT, "
         "year INTEGER, quarter TEXT, value DOUBLE)")
-    insert = "INSERT INTO uad_agg VALUES (?,?,?,?,?,?,?,?,?,?)"
-
     dest = Path(data_dir) / "uad"
-    total = 0
+    total_kept = 0
     for key in AGG_FILES:
         zp = dest / f"{key}.zip"
         if not zp.exists():
@@ -155,44 +162,56 @@ def load_aggregates(db_path: str | Path, data_dir: str | Path = "data") -> None:
                     f"UAD aggregate layout changed in {name}: could not "
                     f"locate {missing}. Columns found: {header}. "
                     f"Update AGG_ALIASES in hmda/uad.py.")
-            buf = []
+            gi = {k: cmap.get(k) for k in AGG_ALIASES}
+
+            def g(row, concept, default=""):
+                i = gi.get(concept)
+                return row[i].strip() if i is not None and i < len(row) else default
+
+            buf, scanned, kept = [], 0, 0
             for row in reader:
-                def g(concept, default=None):
-                    i = cmap.get(concept)
-                    return row[i].strip() if i is not None and i < len(row) else default
-                raw_val = g("value", "")
+                scanned += 1
+                if scanned % 2_000_000 == 0:
+                    print(f"    {name}: scanned {scanned:,} rows, "
+                          f"kept {kept:,}", flush=True)
+                series = g(row, "series")
+                if not KEEP_SERIES_RE.search(series):
+                    continue
+                if not KEEP_GROUP_RE.search(g(row, "group_name")):
+                    continue
+                if not KEEP_PURPOSE_RE.search(g(row, "purpose")):
+                    continue
                 try:
-                    val = float(raw_val)
-                except (TypeError, ValueError):
-                    continue  # suppressed / non-numeric cells
-                try:
-                    year = int(float(g("year", "0")))
+                    val = float(g(row, "value"))
+                    year = int(float(g(row, "year", "0")))
                 except ValueError:
                     continue
-                buf.append((channel, g("geolevel"), g("geoid"), g("series"),
-                            g("purpose"), g("group_name"), g("group_value"),
-                            year, g("quarter"), val))
-                if len(buf) >= 50_000:
-                    conn.executemany(insert, buf)
-                    total += len(buf)
+                buf.append((channel, g(row, "geolevel"), g(row, "geoid"),
+                            series, g(row, "purpose"), g(row, "group_name"),
+                            g(row, "group_value"), year,
+                            g(row, "quarter"), val))
+                kept += 1
+                if len(buf) >= 500_000:
+                    _bulk_insert(conn, engine, "uad_agg", AGG_COLS, buf)
                     buf = []
-            if buf:
-                conn.executemany(insert, buf)
-                total += len(buf)
-            print(f"  loaded {name} ({channel})", flush=True)
+            _bulk_insert(conn, engine, "uad_agg", AGG_COLS, buf)
+            total_kept += kept
+            print(f"  loaded {name} ({channel}): scanned {scanned:,}, "
+                  f"kept {kept:,}", flush=True)
     if engine == "sqlite":
         conn.execute("CREATE INDEX IF NOT EXISTS ix_uadagg ON "
                      "uad_agg(geoid, series, year)")
         conn.commit()
-    print(f"uad_agg: {total:,} rows")
+    print(f"uad_agg: {total_kept:,} rows")
     conn.close()
 
 
-def load_puf(db_path: str | Path, data_dir: str | Path = "data") -> None:
+def load_puf(db_path, data_dir="data"):
     from .db import connect
     conn, engine = connect(db_path)
     dest = Path(data_dir) / "uad"
     created = False
+    created_header = None
     total = 0
     for channel, key in (("enterprise", "puf_ent"), ("fha", "puf_fha")):
         zp = dest / f"{key}.zip"
@@ -202,36 +221,35 @@ def load_puf(db_path: str | Path, data_dir: str | Path = "data") -> None:
         for name, reader in _iter_zip_csv(zp):
             header = [_norm(h) for h in next(reader)]
             if not created:
-                cols = ", ".join(f'"{c}" TEXT' for c in header)
+                cols_sql = ", ".join(f'"{c}" TEXT' for c in header)
                 conn.execute("DROP TABLE IF EXISTS uad_puf")
-                conn.execute(f"CREATE TABLE uad_puf (channel TEXT, {cols})")
+                conn.execute(f"CREATE TABLE uad_puf (channel TEXT, {cols_sql})")
                 created_header = header
                 created = True
-            elif header != created_header:
-                # different layout between channels: align on shared columns
-                header = [h if h in created_header else None for h in header]
-            ph = ", ".join(["?"] * (len(created_header) + 1))
-            insert = f"INSERT INTO uad_puf VALUES ({ph})"
-            buf = []
+            buf, n = [], 0
+            hmap = {h: i for i, h in enumerate(header)}
             for row in reader:
-                rec = dict(zip([h for h in header], row))
-                buf.append([channel] + [rec.get(c, "") for c in created_header])
-                if len(buf) >= 50_000:
-                    conn.executemany(insert, buf)
-                    total += len(buf)
+                rec = [channel] + [
+                    row[hmap[c]].strip() if c in hmap and hmap[c] < len(row)
+                    else "" for c in created_header]
+                buf.append(rec)
+                n += 1
+                if len(buf) >= 250_000:
+                    _bulk_insert(conn, engine, "uad_puf",
+                                 ["channel"] + created_header, buf)
                     buf = []
-            if buf:
-                conn.executemany(insert, buf)
-                total += len(buf)
-            print(f"  loaded {name} ({channel})", flush=True)
+                    print(f"    {name}: {n:,} rows", flush=True)
+            _bulk_insert(conn, engine, "uad_puf",
+                         ["channel"] + created_header, buf)
+            total += n
+            print(f"  loaded {name} ({channel}): {n:,} rows", flush=True)
     if created and engine == "sqlite":
         conn.commit()
     print(f"uad_puf: {total:,} rows")
     conn.close()
 
 
-def run_all(db_path: str | Path, data_dir: str | Path = "data",
-            include_puf: bool = True) -> None:
+def run_all(db_path, data_dir="data", include_puf=True):
     download(data_dir, include_puf)
     load_aggregates(db_path, data_dir)
     if include_puf:
