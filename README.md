@@ -2,7 +2,8 @@
 
 Download the complete HMDA **Modified LAR** (every reporting institution's
 loan/application register) for any year 2018+, build a local analysis
-database, and run four fair-lending analysis modules:
+database, and run five fair-lending analysis modules — including an
+appraisal-equity module built on FHFA's Uniform Appraisal Dataset (UAD):
 
 | Module | What it measures |
 |---|---|
@@ -66,6 +67,12 @@ python run.py analyze --year 2025 --db data_test/hmda.db --out demo_out
 
 (`example_output/` in this folder is exactly that demo's result.)
 
+Note: there's no bundled synthetic UAD fixture, so the demo's `valuation`
+sheet will just show a note to run `python run.py uad` first — everything
+else (denials, pricing, redlining, institutions) runs normally. To see
+`valuation` populated, run the real `uad` step against a loaded database:
+`python run.py uad --data-dir data && python run.py analyze --year 2025`.
+
 ## Data sources (verified July 2026)
 
 - Filer roster: `https://ffiec.cfpb.gov/v2/reporting/filers/{year}`
@@ -92,6 +99,14 @@ python run.py analyze --year 2025 --db data_test/hmda.db --out demo_out
 4. **Derived race/ethnicity** uses the applicant's first-listed race and
    Hispanic ethnicity precedence (standard research practice); joint and
    multiracial detail is collapsed.
+5. **Appraisal-HMDA join is neighborhood-level, not loan-level.** No public
+   dataset links an individual appraisal to a HMDA record, so `valuation`
+   measures undervaluation (below-contract-price share) by census tract and
+   correlates it with HMDA collateral-denial share at the tract level —
+   never at the individual-loan level. It also covers GSE/FHA channels
+   only (no portfolio/private loans), excludes appraisal waivers, compares
+   purchase-money contracts only, and early UAD years carry some
+   2020-tract-boundary noise.
 
 ## Alternative bulk source
 
