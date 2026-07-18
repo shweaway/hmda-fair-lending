@@ -10,8 +10,8 @@ Each state's result is cached to data/census_parts_{vintage}/{fips}.csv as
 it completes, so an interrupted or rate-limited run resumes where it left
 off. The merged file lands at data/census_tracts_{vintage}.csv.
 
-The API works without a key but is far more reliable with one (free,
-instant): https://api.census.gov/data/key_signup.html — then
+The API requires a key (free, instant — anonymous access was disabled):
+https://api.census.gov/data/key_signup.html — then
   setx CENSUS_API_KEY yourkey
 and reopen the terminal.
 
@@ -41,6 +41,9 @@ API = ("https://api.census.gov/data/{vintage}/acs/acs5"
        "&for=tract:*&in=state:{state}")
 
 HEADERS = {"User-Agent": "hmda-fair-lending-research/1.0"}
+
+CACHE_HEADER = ["tract11", "state_fips", "county_fips",
+                "total_pop", "minority_pct", "median_income"]
 
 
 def band(minority_pct: float | None) -> str | None:
@@ -93,8 +96,9 @@ def _fetch_state(st: str, vintage: int, key: str) -> list[list]:
             last_err = RuntimeError(
                 f"Census API returned non-JSON for state {st} "
                 f"(HTTP {r.status_code}): {body_snip!r}\n"
-                "This is usually rate limiting or a temporary Census "
-                "outage. A free API key fixes rate limits: "
+                "The API requires a key ('Missing Key' pages mean the "
+                "request was anonymous); otherwise this is rate limiting "
+                "or a temporary Census outage. Get a free key: "
                 "https://api.census.gov/data/key_signup.html then "
                 "`setx CENSUS_API_KEY yourkey` and reopen the terminal. "
                 "Progress is cached per state — just rerun this step.")
@@ -104,6 +108,24 @@ def _fetch_state(st: str, vintage: int, key: str) -> list[list]:
     raise last_err
 
 
+def _cache_ok(cache: Path) -> bool:
+    """A usable cache has the expected header row and at least one data row.
+
+    Size checks reject the small bundled demo cache; checking the header
+    also catches truncated/corrupt files from interrupted merges.
+    """
+    if not cache.exists():
+        return False
+    try:
+        with cache.open(newline="", encoding="utf-8") as f:
+            r = csv.reader(f)
+            if next(r, None) != CACHE_HEADER:
+                return False
+            return next(r, None) is not None
+    except OSError:
+        return False
+
+
 def fetch_tracts(vintage: int = 2023, cache_dir: str | Path = "data") -> Path:
     """Download tract demographics for all states; returns merged CSV path.
 
@@ -111,16 +133,16 @@ def fetch_tracts(vintage: int = 2023, cache_dir: str | Path = "data") -> Path:
     skipped on rerun.
     """
     cache = Path(cache_dir) / f"census_tracts_{vintage}.csv"
-    if cache.exists() and cache.stat().st_size > 1000:
+    if _cache_ok(cache):
         print(f"Census cache found: {cache}")
         return cache
     parts = Path(cache_dir) / f"census_parts_{vintage}"
     parts.mkdir(parents=True, exist_ok=True)
     key = os.environ.get("CENSUS_API_KEY", "")
     if not key:
-        print("Note: no CENSUS_API_KEY set — the API allows limited "
-              "anonymous use; a free key is more reliable "
-              "(https://api.census.gov/data/key_signup.html)")
+        print("Note: no CENSUS_API_KEY set — api.census.gov requires a key "
+              "and anonymous requests fail with a 'Missing Key' error. "
+              "Get a free key: https://api.census.gov/data/key_signup.html")
     for st in STATE_FIPS:
         part = parts / f"{st}.csv"
         if part.exists() and part.stat().st_size > 0:
@@ -136,8 +158,7 @@ def fetch_tracts(vintage: int = 2023, cache_dir: str | Path = "data") -> Path:
     n = 0
     with cache.open("w", newline="", encoding="utf-8") as out:
         w = csv.writer(out)
-        w.writerow(["tract11", "state_fips", "county_fips",
-                    "total_pop", "minority_pct", "median_income"])
+        w.writerow(CACHE_HEADER)
         for st in STATE_FIPS:
             with (parts / f"{st}.csv").open(encoding="utf-8") as f:
                 for row in csv.reader(f):
