@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+data/
+outputs/
+demo_out/
+*.db
+*.db-journal
+*.part
+.DS_Store
