@@ -156,9 +156,32 @@ def main():
             w.writerow([t, "28", c, 4000,
                         pct, int(75000 - 450 * pct)])
 
+    make_language_fixture(rng, Path(a.data_dir))
     make_uad_fixtures(rng, Path(a.data_dir), a.year)
     print(f"Synthetic data in {a.data_dir}/ "
           f"(ground truth documented in this file's docstring)")
+
+
+def make_language_fixture(rng, data_dir: Path) -> None:
+    """County-level ACS C16001 stand-in for the markets module demo."""
+    from hmda.language import LANGUAGES
+
+    counties = {c for _, c, _ in TRACTS}
+    cols = ["county_fips", "county_name", "pop5plus", "english_only"]
+    for k in LANGUAGES:
+        cols += [f"{k}_total", f"{k}_lep"]
+    with (data_dir / "county_language_2023.csv").open(
+            "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(cols)
+        for c in sorted(counties):
+            pop = rng.randint(80_000, 200_000)
+            row = [c, f"Test County {c}, Mississippi",
+                   pop, int(pop * 0.82)]
+            for k in LANGUAGES:
+                total = rng.randint(200, int(pop * 0.06))
+                row += [total, int(total * rng.uniform(0.2, 0.6))]
+            w.writerow(row)
 
 
 def make_uad_fixtures(rng, data_dir: Path, year: int) -> None:

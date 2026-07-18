@@ -9,6 +9,10 @@ Steps (run in order, or `all`):
   python run.py analyze    --year 2025            # run all five modules
   python run.py all        --year 2025
 
+Marketing (separate deliverable, not part of `all`):
+  python run.py market     --year 2025            # inclusive market/
+                                                  # localization brief
+
 Useful flags:
   --limit N        download only the first N institutions (smoke test)
   --skip-puf       uad step: skip the appraisal-level PUF
@@ -28,8 +32,9 @@ from hmda import db as hdb               # noqa: E402
 from hmda import census as hcensus       # noqa: E402
 from hmda import report as hreport       # noqa: E402
 from hmda import uad as huad             # noqa: E402
+from hmda import language as hlang       # noqa: E402
 from hmda.analysis import (denials, pricing, redlining, institutions,  # noqa: E402
-                           valuation)
+                           valuation, markets)
 
 
 def cmd_download(a):
@@ -70,11 +75,40 @@ def cmd_analyze(a):
     print(f"\nWrote:\n  {xlsx}\n  {html}\n  {len(charts)} charts in {out/'charts'}")
 
 
+def cmd_market(a):
+    try:
+        path = hlang.fetch_language(a.vintage, a.data_dir)
+        hlang.load_language(a.db, path)
+    except SystemExit as e:
+        print(f"Language data skipped: {e}")
+    except Exception as e:
+        print(f"Language data skipped ({e!r}) — continuing without it")
+    conn, engine = hdb.connect(a.db)
+    print(f"Engine: {engine}")
+    print("Running markets ...", flush=True)
+    results = {"markets": markets.run(conn, engine, a.year)}
+    out = Path(a.out)
+    xlsx = hreport.write_excel(results, out / f"market_insights_{a.year}.xlsx")
+    charts = hreport.make_charts(results, out / "charts")
+    html = hreport.write_html(
+        results, charts, a.year, out / "market_insights.html",
+        title=f"HMDA {a.year} — Inclusive Market Insights",
+        note="<b>Read this first.</b> These tables support INCLUSIVE "
+             "marketing: adding languages, channels, and outreach so more "
+             "of the market is reached. Fair-lending law (ECOA, Fair "
+             "Housing Act) prohibits using neighborhood or group "
+             "demographics to exclude, discourage, or steer — never use "
+             "these outputs to decide where NOT to market or whom to "
+             "offer less favorable terms. See the guardrails table below; "
+             "route campaigns through compliance review.")
+    print(f"\nWrote:\n  {xlsx}\n  {html}\n  {len(charts)} charts in {out/'charts'}")
+
+
 def main():
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("step", choices=["download", "load", "census", "uad",
-                                    "analyze", "all"])
+                                    "analyze", "market", "all"])
     p.add_argument("--skip-puf", action="store_true",
                    help="uad step: aggregate statistics only, no "
                         "appraisal-level PUF")
@@ -92,7 +126,8 @@ def main():
     Path(a.data_dir).mkdir(parents=True, exist_ok=True)
 
     steps = {"download": cmd_download, "load": cmd_load,
-             "census": cmd_census, "uad": cmd_uad, "analyze": cmd_analyze}
+             "census": cmd_census, "uad": cmd_uad, "analyze": cmd_analyze,
+             "market": cmd_market}
     if a.step == "all":
         for s in ("download", "load", "census", "uad", "analyze"):
             print(f"\n=== {s.upper()} ===")

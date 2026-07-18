@@ -108,6 +108,20 @@ def make_charts(results: dict, charts_dir: str | Path) -> list[Path]:
         p = charts_dir / "undervaluation_trend.png"
         fig.savefig(p, dpi=150); plt.close(fig); made.append(p)
 
+    lang = results.get("markets", {}).get("language_national")
+    if lang is not None and len(lang) and "Language" in lang:
+        sub = _chart_data(lang, "Language", ["Limited English (LEP)"])
+        fig, ax = plt.subplots(figsize=(9, 5))
+        ax.barh(sub["Language"], sub["Limited English (LEP)"] / 1e6,
+                color="#5A7D9A")
+        ax.set_xlabel("Limited-English-proficient speakers (millions)")
+        ax.set_title("Language localization priorities — national LEP "
+                     "population by language (ACS C16001)")
+        ax.invert_yaxis()
+        fig.tight_layout()
+        p = charts_dir / "language_lep.png"
+        fig.savefig(p, dpi=150); plt.close(fig); made.append(p)
+
     pr = results.get("pricing", {}).get("rate_spread_by_group")
     if pr is not None and len(pr):
         fig, ax = plt.subplots(figsize=(9, 5))
@@ -125,10 +139,19 @@ def make_charts(results: dict, charts_dir: str | Path) -> list[Path]:
 
 
 def write_html(results: dict, charts: list[Path], year: int,
-               out_path: str | Path) -> Path:
+               out_path: str | Path, title: str | None = None,
+               note: str | None = None) -> Path:
     out_path = Path(out_path)
+    title = title or f"HMDA Modified LAR {year} — Fair Lending Analysis"
+    note = note or ("""<b>Read this first.</b> These are screening statistics from
+public HMDA data. The public files exclude credit scores, precise DTI/LTV,
+and other underwriting detail, so disparities shown here are evidence of
+patterns that warrant scrutiny — not, by themselves, proof of unlawful
+discrimination. Loans from partially-exempt filers drop out of pricing
+tables entirely. Appraisal (UAD) analyses are neighborhood-level and
+cover GSE/FHA channels only.""")
     parts = [f"""<!doctype html><html><head><meta charset="utf-8">
-<title>HMDA {year} Fair Lending Analysis</title>
+<title>{title}</title>
 <style>
  body{{font-family:Georgia,serif;max-width:1100px;margin:2em auto;
       color:#1a1a1a;line-height:1.45}}
@@ -139,14 +162,8 @@ def write_html(results: dict, charts: list[Path], year: int,
  .note{{background:#f6f1e7;padding:1em;border-left:4px solid #C86B52}}
  img{{max-width:100%}}
 </style></head><body>
-<h1>HMDA Modified LAR {year} — Fair Lending Analysis</h1>
-<p class="note"><b>Read this first.</b> These are screening statistics from
-public HMDA data. The public files exclude credit scores, precise DTI/LTV,
-and other underwriting detail, so disparities shown here are evidence of
-patterns that warrant scrutiny — not, by themselves, proof of unlawful
-discrimination. Loans from partially-exempt filers drop out of pricing
-tables entirely. Appraisal (UAD) analyses are neighborhood-level and
-cover GSE/FHA channels only.</p>"""]
+<h1>{title}</h1>
+<p class="note">{note}</p>"""]
     for ch in charts:
         parts.append(f'<img src="charts/{ch.name}" alt="{ch.stem}">')
     for module, sheets in results.items():

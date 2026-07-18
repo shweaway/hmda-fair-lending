@@ -63,6 +63,7 @@ python tests/make_test_data.py --data-dir data_test
 python run.py load    --year 2025 --data-dir data_test --db data_test/hmda.db
 python run.py census  --data-dir data_test --db data_test/hmda.db  # uses bundled synthetic census cache
 python run.py analyze --year 2025 --db data_test/hmda.db --out demo_out
+python run.py market  --year 2025 --data-dir data_test --db data_test/hmda.db --out demo_out  # marketing brief
 ```
 
 (`example_output/` in this folder is exactly that demo's result.)
@@ -107,6 +108,47 @@ else (denials, pricing, redlining, institutions) runs normally. To see
    only (no portfolio/private loans), excludes appraisal waivers, compares
    purchase-money contracts only, and early UAD years carry some
    2020-tract-boundary noise.
+
+## Marketing insights (`market-insights` branch)
+
+The same database can answer inclusive-marketing questions: where is
+mortgage demand, which communities drive it, what languages do they
+speak, and where is the market underserved or thinly competed.
+
+```
+python run.py market --year 2025
+```
+
+writes `outputs/market_insights_2025.xlsx` + `market_insights.html` with:
+
+| Sheet | What it tells a marketing team |
+|---|---|
+| `guardrails` | Permitted vs. prohibited uses — always the first sheet |
+| `county_market_size` | Largest county markets: applications, originations, volume, denial rate |
+| `county_group_mix` | Demographic mix of application demand per county |
+| `language_national` / `language_by_county` | Speakers and limited-English (LEP) population per language group (ACS C16001) — which languages to localize creative in, and where |
+| `underserved_tracts` | Majority-minority tracts originating below their county rate — the inclusive-outreach opportunity list |
+| `product_mix_by_group` | Conventional/FHA/VA/USDA shares within each community |
+| `demand_trend_by_group` | Application demand by community across all loaded years |
+| `thin_competition` | High-volume counties with concentrated lending (HHI ≥ 2500) |
+
+The language sheets need a free Census API key
+(`setx CENSUS_API_KEY yourkey`); without one the step still runs and
+marks those sheets with a note.
+
+**Fair-lending guardrails — read before using any of this.** ECOA and
+the Fair Housing Act permit *inclusive* marketing: adding languages,
+channels, community partnerships, and outreach that welcome underserved
+groups (the same logic behind CRA performance and Special Purpose Credit
+Programs, Reg B § 1002.8). They prohibit the reverse: using neighborhood
+or group demographics to **exclude, discourage, or avoid** marketing to
+anyone (redlining / digital redlining), to target **less favorable
+products or terms** at protected groups (reverse redlining), to feed
+protected-class data into **credit or pricing decisions**, or to build
+ad-platform audiences that proxy protected classes (housing ads face
+special targeting restrictions on major platforms since the 2019
+HUD/Facebook settlement). Route campaigns built on these outputs through
+fair-lending/compliance review and document the inclusive intent.
 
 ## Alternative bulk source
 
