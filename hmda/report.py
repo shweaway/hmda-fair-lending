@@ -60,6 +60,33 @@ def make_charts(results: dict, charts_dir: str | Path) -> list[Path]:
         p = charts_dir / "denial_by_tract_minority.png"
         fig.savefig(p, dpi=150); plt.close(fig); made.append(p)
 
+    v = results.get("valuation", {}).get("undervaluation_by_minority_band")
+    if v is not None and len(v):
+        val_col = [c for c in v.columns if c.startswith("Appraisals below")]
+        if val_col:
+            fig, ax = plt.subplots(figsize=(8, 4.5))
+            ax.bar(v["Tract minority share"].astype(str), v[val_col[0]],
+                   color="#7A5C61")
+            ax.set_xlabel("Census tract minority population share")
+            ax.set_ylabel("Appraisals below contract price (%)")
+            ax.set_title("Appraisal undervaluation by neighborhood "
+                         "minority share (Enterprise purchases)")
+            fig.tight_layout()
+            p = charts_dir / "undervaluation_by_band.png"
+            fig.savefig(p, dpi=150); plt.close(fig); made.append(p)
+
+    vt = results.get("valuation", {}).get("undervaluation_trend")
+    if vt is not None and len(vt) > 1:
+        fig, ax = plt.subplots(figsize=(8, 4.5))
+        for col in [c for c in vt.columns if c != "Year"]:
+            ax.plot(vt["Year"], vt[col], marker="o", label=str(col))
+        ax.set_xlabel("Year"); ax.set_ylabel("Below contract (%)")
+        ax.set_title("Undervaluation trend by tract minority share")
+        ax.legend(fontsize=8)
+        fig.tight_layout()
+        p = charts_dir / "undervaluation_trend.png"
+        fig.savefig(p, dpi=150); plt.close(fig); made.append(p)
+
     pr = results.get("pricing", {}).get("rate_spread_by_group")
     if pr is not None and len(pr):
         fig, ax = plt.subplots(figsize=(9, 5))
@@ -96,7 +123,8 @@ public HMDA data. The public files exclude credit scores, precise DTI/LTV,
 and other underwriting detail, so disparities shown here are evidence of
 patterns that warrant scrutiny — not, by themselves, proof of unlawful
 discrimination. Loans from partially-exempt filers drop out of pricing
-tables entirely.</p>"""]
+tables entirely. Appraisal (UAD) analyses are neighborhood-level and
+cover GSE/FHA channels only.</p>"""]
     for ch in charts:
         parts.append(f'<img src="charts/{ch.name}" alt="{ch.stem}">')
     for module, sheets in results.items():

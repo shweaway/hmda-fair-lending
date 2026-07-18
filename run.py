@@ -5,11 +5,13 @@ Steps (run in order, or `all`):
   python run.py download   --year 2025            # fetch every filer's file
   python run.py load       --year 2025            # build the database
   python run.py census                            # tract demographics (ACS)
-  python run.py analyze    --year 2025            # run all four modules
+  python run.py uad                               # FHFA appraisal data
+  python run.py analyze    --year 2025            # run all five modules
   python run.py all        --year 2025
 
 Useful flags:
   --limit N        download only the first N institutions (smoke test)
+  --skip-puf       uad step: skip the appraisal-level PUF
   --data-dir DIR   where raw files + db live (default ./data)
   --out DIR        analysis outputs (default ./outputs)
 """
@@ -25,7 +27,9 @@ from hmda import download as dl          # noqa: E402
 from hmda import db as hdb               # noqa: E402
 from hmda import census as hcensus       # noqa: E402
 from hmda import report as hreport       # noqa: E402
-from hmda.analysis import denials, pricing, redlining, institutions  # noqa: E402
+from hmda import uad as huad             # noqa: E402
+from hmda.analysis import (denials, pricing, redlining, institutions,  # noqa: E402
+                           valuation)
 
 
 def cmd_download(a):
@@ -41,13 +45,18 @@ def cmd_census(a):
     hcensus.load_tracts(a.db, path)
 
 
+def cmd_uad(a):
+    huad.run_all(a.db, a.data_dir, include_puf=not a.skip_puf)
+
+
 def cmd_analyze(a):
     conn, engine = hdb.connect(a.db)
     print(f"Engine: {engine}")
     results = {}
     for name, mod in [("denials", denials), ("pricing", pricing),
                       ("redlining", redlining),
-                      ("institutions", institutions)]:
+                      ("institutions", institutions),
+                      ("valuation", valuation)]:
         print(f"Running {name} ...", flush=True)
         try:
             results[name] = mod.run(conn, engine, a.year)
@@ -64,8 +73,11 @@ def cmd_analyze(a):
 def main():
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("step", choices=["download", "load", "census",
+    p.add_argument("step", choices=["download", "load", "census", "uad",
                                     "analyze", "all"])
+    p.add_argument("--skip-puf", action="store_true",
+                   help="uad step: aggregate statistics only, no "
+                        "appraisal-level PUF")
     p.add_argument("--year", type=int, default=2025)
     p.add_argument("--data-dir", default="data")
     p.add_argument("--db", default=None)
@@ -80,9 +92,9 @@ def main():
     Path(a.data_dir).mkdir(parents=True, exist_ok=True)
 
     steps = {"download": cmd_download, "load": cmd_load,
-             "census": cmd_census, "analyze": cmd_analyze}
+             "census": cmd_census, "uad": cmd_uad, "analyze": cmd_analyze}
     if a.step == "all":
-        for s in ("download", "load", "census", "analyze"):
+        for s in ("download", "load", "census", "uad", "analyze"):
             print(f"\n=== {s.upper()} ===")
             steps[s](a)
     else:

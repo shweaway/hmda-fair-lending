@@ -155,8 +155,81 @@ def main():
         for t, c, pct in TRACTS:
             w.writerow([t, "28", c, 4000,
                         pct, int(75000 - 450 * pct)])
+
+    make_uad_fixtures(rng, Path(a.data_dir), a.year)
     print(f"Synthetic data in {a.data_dir}/ "
           f"(ground truth documented in this file's docstring)")
+
+
+def make_uad_fixtures(rng, data_dir: Path, year: int) -> None:
+    """Synthetic UAD zips with a PLANTED valuation gap.
+
+    Ground truth: below-contract share rises linearly with tract minority
+    share, from ~6% (<10% minority) to ~14% (80-100%); FHA counties run
+    ~2ppt above Enterprise. The valuation module must recover a monotonic
+    gradient and a positive FHA-minus-Enterprise difference.
+    """
+    import io as _io
+    import zipfile as _zip
+
+    uad_dir = data_dir / "uad"
+    uad_dir.mkdir(parents=True, exist_ok=True)
+
+    def below_for(pct):  # planted relationship
+        return 6.0 + 8.0 * (pct / 100.0)
+
+    years = list(range(year - 3, year + 1))
+
+    def agg_rows(geolevel):
+        rows = [["GEOLEVEL", "GEOID", "SERIES", "PURPOSE", "CHARACTERISTIC",
+                 "CATEGORY", "YEAR", "QUARTER", "VALUE"]]
+        for y in years:
+            if geolevel == "tract":
+                for t, c, pct in TRACTS:
+                    b = below_for(pct) + rng.gauss(0, 0.4) + 0.3 * (y - year)
+                    rows.append(["Tract", t,
+                                 "Share of Appraisals Below Contract Price",
+                                 "Purchase", "All", "All", y, "Annual",
+                                 round(b, 2)])
+                    rows.append(["Tract", t, "Count of Appraisals",
+                                 "Purchase", "All", "All", y, "Annual",
+                                 rng.randrange(40, 400)])
+            else:
+                for c in COUNTIES:
+                    pct = sum(p for _, cc, p in TRACTS if cc == c) / 8
+                    bump = 2.0 if geolevel == "county_fha" else 0.0
+                    b = below_for(pct) + bump + rng.gauss(0, 0.3)
+                    rows.append(["County", c,
+                                 "Share of Appraisals Below Contract Price",
+                                 "Purchase", "All", "All", y, "Annual",
+                                 round(b, 2)])
+                    rows.append(["County", c, "Count of Appraisals",
+                                 "Purchase", "All", "All", y, "Annual",
+                                 rng.randrange(500, 3000)])
+        return rows
+
+    def write_zip(name, rows):
+        buf = _io.StringIO()
+        csv.writer(buf).writerows(rows)
+        with _zip.ZipFile(uad_dir / name, "w", _zip.ZIP_DEFLATED) as z:
+            z.writestr(name.replace(".zip", ".csv"), buf.getvalue())
+
+    write_zip("ent_sf_tract.zip", agg_rows("tract"))
+    write_zip("ent_sf_county.zip", agg_rows("county"))
+    write_zip("fha_sf_county.zip", agg_rows("county_fha"))
+
+    # PUF: appraisal-level with the same planted gradient
+    for channel, fname in (("ent", "puf_ent.zip"), ("fha", "puf_fha.zip")):
+        rows = [["APPRAISAL_YEAR", "PURPOSE", "CENSUS_TRACT",
+                 "APPRAISAL_BELOW_CONTRACT_FLAG", "WEIGHT"]]
+        for _ in range(6000):
+            t, c, pct = rng.choices(TRACTS)[0]
+            p_below = (below_for(pct) + (2.0 if channel == "fha" else 0)) / 100
+            rows.append([rng.choice(years), "Purchase", t,
+                         1 if rng.random() < p_below else 0,
+                         round(rng.uniform(15, 25), 1)])
+        write_zip(fname, rows)
+    print(f"  UAD fixtures in {uad_dir}")
 
 
 if __name__ == "__main__":

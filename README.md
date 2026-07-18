@@ -10,6 +10,7 @@ database, and run four fair-lending analysis modules:
 | `pricing` | Rate spread, note rate, loan costs, HOEPA high-cost share by group; tracks how much data the EGRRCPA partial exemption removes |
 | `redlining` | Lending by census-tract minority share and income; per-lender majority-minority-tract screen vs. market benchmark (the method used in DOJ/CFPB redlining matters) |
 | `institutions` | Top lenders, exemption usage, purchaser/securitization channels by group, AUS usage, county market concentration (HHI) |
+| `valuation` | Appraisal equity via FHFA UAD: undervaluation (appraisals below contract price) by tract minority share and income, trend over time, FHA vs Enterprise, collateral-denial cross-check with HMDA |
 
 Everything was validated end-to-end against a synthetic dataset with known
 injected disparities (see `tests/make_test_data.py`) — the pipeline recovers
@@ -40,6 +41,7 @@ or step by step:
 python run.py download --year 2025     # ~4,000-5,000 files, 3-5 GB, a few hours
 python run.py load     --year 2025     # parse + build data/hmda.db
 python run.py census                   # ACS tract demographics (redlining)
+python run.py uad                      # FHFA appraisal data (valuation module)
 python run.py analyze  --year 2025     # -> outputs/hmda_2025_analysis.xlsx + summary.html
 ```
 
@@ -71,6 +73,7 @@ python run.py analyze --year 2025 --db data_test/hmda.db --out demo_out
 - Schema: https://ffiec.cfpb.gov/documentation/publications/modified-lar/modified-lar-schema
 - Code sheet: https://files.ffiec.cfpb.gov/documentation/2018-public-LAR-code-sheet.pdf
 - Census: ACS 5-year API (`api.census.gov`), variables B03002, B19013
+- Appraisals: FHFA UAD Aggregate Statistics v3.3 + Appraisal-Level PUF (Enterprise v2.1, FHA v1.0) from fhfa.gov — `--skip-puf` to skip the large appraisal-level files
 
 ## Interpreting results — important caveats
 
