@@ -78,8 +78,12 @@ def cmd_analyze(a):
 def cmd_explore(a):
     conn, engine = hdb.connect(a.db)
     print(f"Engine: {engine}")
-    hexplorer.build(conn, engine, a.year,
-                    Path(a.out) / f"explorer_{a.year}.html")
+    out = Path(a.out)
+    hexplorer.build(conn, engine, a.year, out / f"explorer_{a.year}.html")
+    hexplorer.build_lenders(conn, engine, a.year,
+                            out / f"lenders_{a.year}.html")
+    hexplorer.build_loans(conn, engine, a.year,
+                          out / f"loans_{a.year}.html")
 
 
 def main():

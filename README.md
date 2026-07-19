@@ -56,7 +56,7 @@ Notes:
 - Optional: set a free Census API key (`setx CENSUS_API_KEY yourkey`)
   if the census step gets rate-limited.
 
-## Interactive tract explorer (`analyst-explorer` branch)
+## Interactive explorers (`analyst-explorer` branch)
 
 For pattern-hunting that a static workbook can't do:
 
@@ -64,9 +64,10 @@ For pattern-hunting that a static workbook can't do:
 python run.py explore --year 2025
 ```
 
-writes `outputs/explorer_{year}.html` — a **single self-contained file**
-(no server, no internet, shareable by email) that lets an analyst slice
-the tract-level data live:
+writes three **single self-contained HTML files** (no server, no
+internet, shareable by email) to `outputs/`:
+
+### `explorer_{year}.html` — tracts × demography
 
 - Filters for state, county, tract minority-share band, state income
   quintile, applicant group, and minimum volume — every chart, stat, and
@@ -78,6 +79,36 @@ the tract-level data live:
   plus FIPS search to track down specific tracts.
 - Click any tract for a drill-down: demography, volumes, denial rate by
   applicant group within that tract, and loan-type mix.
+
+### `lenders_{year}.html` — institutions × tracts × demography
+
+How each lender performs against the market benchmark (every lender in
+the current state scope):
+
+- A footprint scatter: each lender's share of applications from
+  majority-minority tracts vs. its denial rate, with the market's share
+  as a reference line — the interactive version of the DOJ/CFPB-style
+  redlining screen.
+- A sortable lender table: volume, denial rate, MM-tract share and Δ vs
+  market, Black–White denial gap, and EGRRCPA pricing-exempt share.
+- Click a lender for a drill-down: side-by-side lender-vs-market bars
+  for application share by tract minority band and denial rate by
+  applicant group, plus a fact sheet.
+
+### `loans_{year}.html` — loan parameters × pricing
+
+Slice by loan type (channel), purpose, occupancy, loan-amount band, and
+applicant group; every stat, chart, and table follows the slice:
+
+- KPIs: denial rate, mean rate spread over APOR, high-priced share
+  (≥1.5 ppt), mean note rate, and **pricing visible %** — how much of
+  the slice the EGRRCPA exemption leaves dark.
+- Denial rate by amount band and mean rate spread by group, recomputed
+  within the slice.
+- A pivot table: choose the breakdown dimension (amount, type, purpose,
+  occupancy, group) and read denial, origination, spread, high-priced,
+  HOEPA, and pricing-visibility per row. Pricing stats cover originated
+  first-lien loans with reported pricing, matching the `pricing` module.
 
 Rates from fewer than 10 applications are suppressed (shown as ·) —
 tiny denominators mislead more than they inform. The full-national file
