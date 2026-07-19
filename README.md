@@ -110,6 +110,24 @@ applicant group; every stat, chart, and table follows the slice:
   HOEPA, and pricing-visibility per row. Pricing stats cover originated
   first-lien loans with reported pricing, matching the `pricing` module.
 
+### `run.py serve` — unified slice explorer (every filter combined)
+
+The three files above embed pre-aggregated cubes, which caps how many
+dimensions can cross. For arbitrary combinations, run the local web app:
+
+```
+python run.py serve --year 2025          # opens http://127.0.0.1:8600
+```
+
+It queries the DuckDB/SQLite database live (localhost only, stdlib
+HTTP server, no new dependencies), so **any** combination of geography
+(state, county, tract minority band, income quintile), lender, loan
+parameters (type, purpose, occupancy, amount band), and applicant group
+works — with any of those as the "split by" dimension. KPIs, denial and
+rate-spread charts, and a full-metric breakdown table follow the slice.
+Example: Redline-screen a single lender's conventional lending inside
+80-100% minority tracts, split by applicant group — one query.
+
 Rates from fewer than 10 applications are suppressed (shown as ·) —
 tiny denominators mislead more than they inform. The full-national file
 embeds every tract with activity (roughly 85k), so expect a file in the

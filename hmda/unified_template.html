@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HMDA Slice Explorer</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --baseline: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 24px 60px; }
+header h1 { font-size: 20px; margin: 0 0 2px; }
+header .sub { color: var(--text-secondary); margin: 0 0 4px; }
+header .caveat { color: var(--muted); font-size: 12px; margin: 0; }
+.toolbar { display: flex; align-items: flex-end; gap: 12px; }
+.toolbar .grow { flex: 1; }
+button.theme { background: var(--surface-1); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px 14px;
+  align-items: flex-end; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; margin: 16px 0; }
+.filters label { display: flex; flex-direction: column; gap: 3px;
+  font-size: 11px; color: var(--text-secondary); }
+.filters select, .filters input { font: inherit; font-size: 13px;
+  color: var(--text-primary); background: var(--page);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 8px; min-width: 110px; max-width: 240px; }
+.filters .reset { background: none; border: none; color: var(--series-1);
+  cursor: pointer; font: inherit; font-size: 12px; padding: 6px 2px; }
+.filters .sep { width: 1px; align-self: stretch;
+  background: var(--grid); margin: 2px 2px; }
+.kpis { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.kpi { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px; min-width: 130px; }
+.kpi .label { font-size: 11px; color: var(--text-secondary); }
+.kpi .value { font-size: 24px; font-weight: 600; }
+.cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .cards2 { grid-template-columns: 1fr; } }
+.card { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.card h2 { font-size: 14px; margin: 0 0 2px; }
+.card .hint { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+svg text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif;
+  fill: var(--muted); }
+svg .vallabel { fill: var(--text-secondary);
+  font-variant-numeric: tabular-nums; }
+svg .gridline { stroke: var(--grid); stroke-width: 1; }
+svg .axisline { stroke: var(--baseline); stroke-width: 1; }
+.tooltip { position: fixed; pointer-events: none; z-index: 10;
+  display: none; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.18); max-width: 280px; }
+.tooltip .tt-val { font-weight: 600; font-size: 14px; }
+.tooltip .tt-row { color: var(--text-secondary); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 5px 8px; text-align: right; white-space: nowrap; }
+th.txt, td.txt { text-align: left; }
+td { border-top: 1px solid var(--grid);
+  font-variant-numeric: tabular-nums; }
+td.txt { max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+th { color: var(--text-secondary); font-weight: 600;
+  border-bottom: 1px solid var(--baseline); }
+.tablewrap { overflow-x: auto; }
+.tablenote { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+.loading { opacity: 0.45; transition: opacity 0.15s; }
+.err { background: color-mix(in srgb, #d03b3b 12%, transparent);
+  border: 1px solid #d03b3b; border-radius: 8px; padding: 8px 12px;
+  font-size: 13px; margin: 8px 0; display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="toolbar">
+      <div class="grow">
+        <h1>HMDA Slice Explorer</h1>
+        <p class="sub" id="subtitle">Connecting…</p>
+        <p class="caveat">Live queries against the local database — every
+        filter combination works, split by any dimension. Screening
+        statistics, not proof of discrimination. Rates from fewer than
+        <span id="supn">10</span> records are suppressed (·). Pricing
+        stats cover originated first-lien loans with reported pricing.</p>
+      </div>
+      <button class="theme" id="themeBtn" type="button">Dark mode</button>
+    </div>
+  </header>
+
+  <div class="filters" id="filters">
+    <label>State
+      <select id="fState" data-k="state"><option value="">All</option></select>
+    </label>
+    <label>County
+      <select id="fCounty" data-k="county"><option value="">All</option></select>
+    </label>
+    <label>Tract minority share
+      <select id="fBand" data-k="band"><option value="">All</option></select>
+    </label>
+    <label>Income quintile
+      <select id="fIncq" data-k="incq">
+        <option value="">All</option>
+        <option value="1">Q1 (lowest)</option><option value="2">Q2</option>
+        <option value="3">Q3</option><option value="4">Q4</option>
+        <option value="5">Q5 (highest)</option>
+      </select>
+    </label>
+    <div class="sep"></div>
+    <label>Lender
+      <input id="fLender" list="lenderList" placeholder="name or LEI"
+             size="26">
+      <datalist id="lenderList"></datalist>
+    </label>
+    <div class="sep"></div>
+    <label>Loan type
+      <select id="fLt" data-k="lt"><option value="">All</option></select>
+    </label>
+    <label>Purpose
+      <select id="fPurpose" data-k="purpose"><option value="">All</option></select>
+    </label>
+    <label>Occupancy
+      <select id="fOcc" data-k="occ"><option value="">All</option></select>
+    </label>
+    <label>Loan amount
+      <select id="fAmt" data-k="amt"><option value="">All</option></select>
+    </label>
+    <label>Applicant group
+      <select id="fGrp" data-k="grp"><option value="">All</option></select>
+    </label>
+    <div class="sep"></div>
+    <label>Split by
+      <select id="fBy">
+        <option value="grp">Applicant group</option>
+        <option value="band">Tract minority share</option>
+        <option value="incq">Income quintile</option>
+        <option value="state">State</option>
+        <option value="county">County</option>
+        <option value="lei">Lender</option>
+        <option value="lt">Loan type</option>
+        <option value="purpose">Purpose</option>
+        <option value="occ">Occupancy</option>
+        <option value="amt">Loan amount</option>
+      </select>
+    </label>
+    <button class="reset" id="fReset" type="button">Reset</button>
+  </div>
+
+  <div class="err" id="errBox"></div>
+  <div id="content">
+    <div class="kpis" id="kpis"></div>
+    <div class="cards2">
+      <div class="card">
+        <h2 id="chart1Title">Denial rate</h2>
+        <p class="hint" id="chart1Hint"></p>
+        <svg id="chart1" width="100%" height="300" role="img"
+         aria-label="Denial rate by the selected split dimension"></svg>
+      </div>
+      <div class="card">
+        <h2 id="chart2Title">Mean rate spread</h2>
+        <p class="hint">Originated first-lien, reported pricing;
+        ppt over APOR.</p>
+        <svg id="chart2" width="100%" height="300" role="img"
+         aria-label="Mean rate spread by the selected split dimension"></svg>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Breakdown</h2>
+      <p class="hint" id="tblHint"></p>
+      <div class="tablewrap"><table>
+        <thead><tr id="tblHead"></tr></thead>
+        <tbody id="tblBody"></tbody>
+      </table></div>
+      <p class="tablenote" id="tblNote"></p>
+    </div>
+  </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+"use strict";
+let META = null;
+const state = { state:"", county:"", band:"", incq:"", lei:"", lt:"",
+                purpose:"", occ:"", grp:"", amt:"", by:"grp" };
+let SUP = 10;
+const fmt = n=>n==null?"·":n.toLocaleString("en-US");
+const fmt1 = n=>n==null?"·":n.toLocaleString("en-US",{maximumFractionDigits:1});
+const fmt2 = n=>n==null?"·":n.toLocaleString("en-US",{maximumFractionDigits:2});
+const rate=(n,x)=>(n==null||n<SUP)?null:100*x/n;
+const mean=(n,s)=>(n==null||n<SUP)?null:s/n;
+
+const tip=document.getElementById("tooltip");
+function showTip(x,y,lines){
+  tip.replaceChildren();
+  for (const [txt,strong] of lines){
+    const d=document.createElement("div");
+    d.className=strong?"tt-val":"tt-row";
+    d.textContent=txt; tip.appendChild(d);
+  }
+  tip.style.display="block";
+  tip.style.left=Math.min(x+14, innerWidth-tip.offsetWidth-8)+"px";
+  tip.style.top=Math.min(y+14, innerHeight-tip.offsetHeight-8)+"px";
+}
+const hideTip=()=>tip.style.display="none";
+function bindTheme(){
+  const btn=document.getElementById("themeBtn");
+  const cur=()=>document.documentElement.dataset.theme
+    || (matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+  const sync=()=>btn.textContent=cur()==="dark"?"Light mode":"Dark mode";
+  btn.addEventListener("click",()=>{
+    document.documentElement.dataset.theme=cur()==="dark"?"light":"dark";
+    sync();});
+  sync();
+}
+
+function opt(sel, value, label){
+  const o=document.createElement("option");
+  o.value=value; o.textContent=label; sel.appendChild(o);
+}
+function fillCounties(){
+  const sel=document.getElementById("fCounty");
+  while (sel.options.length>1) sel.remove(1);
+  for (const c of META.counties)
+    if (!state.state || c.state===state.state)
+      opt(sel, c.fips, c.name);
+}
+function initFilters(){
+  const s=document.getElementById("fState");
+  for (const st of META.states) opt(s, st, st);
+  fillCounties();
+  const b=document.getElementById("fBand");
+  for (const band of META.bands) opt(b, band, band);
+  const lt=document.getElementById("fLt");
+  for (const [c,l] of Object.entries(META.loan_types)) opt(lt,c,l);
+  const pu=document.getElementById("fPurpose");
+  for (const [c,l] of Object.entries(META.purposes)) opt(pu,c,l);
+  const oc=document.getElementById("fOcc");
+  for (const [c,l] of Object.entries(META.occupancy)) opt(oc,c,l);
+  const am=document.getElementById("fAmt");
+  META.amt_labels.forEach((l,i)=>opt(am,String(i),l));
+  opt(am,"-1","Not reported");
+  const gr=document.getElementById("fGrp");
+  for (const g of META.groups) opt(gr,g,META.group_labels[g]||g);
+  const dl=document.getElementById("lenderList");
+  for (const x of META.lenders)
+    opt(dl, x.lei, x.name?`${x.name} (${x.lei})`:x.lei);
+
+  for (const sel of document.querySelectorAll("select[data-k]"))
+    sel.addEventListener("change", ()=>{
+      state[sel.dataset.k]=sel.value;
+      if (sel.dataset.k==="state"){ state.county=""; fillCounties();
+        document.getElementById("fCounty").value=""; }
+      refresh();
+    });
+  const lender=document.getElementById("fLender");
+  lender.addEventListener("change", ()=>{
+    const v=lender.value.trim();
+    const m=v.match(/\(([A-Z0-9]{20})\)\s*$/i);
+    state.lei = m ? m[1] : v;
+    refresh();
+  });
+  document.getElementById("fBy").addEventListener("change", e=>{
+    state.by=e.target.value; refresh();
+  });
+  document.getElementById("fReset").addEventListener("click", ()=>{
+    for (const k in state) state[k]="";
+    state.by="grp";
+    for (const sel of document.querySelectorAll("select[data-k]"))
+      sel.value="";
+    document.getElementById("fBy").value="grp";
+    lender.value="";
+    fillCounties(); refresh();
+  });
+}
+
+let inflight=null;
+async function refresh(){
+  const qs=new URLSearchParams();
+  for (const k of ["state","county","band","incq","lei","lt","purpose",
+                   "occ","grp","amt"])
+    if (state[k]) qs.set(k, state[k]);
+  qs.set("by", state.by);
+  const content=document.getElementById("content");
+  content.classList.add("loading");
+  const err=document.getElementById("errBox");
+  const ctrl=new AbortController();
+  if (inflight) inflight.abort();
+  inflight=ctrl;
+  try {
+    const res=await fetch("/api/agg?"+qs, {signal: ctrl.signal});
+    const data=await res.json();
+    if (data.error) throw new Error(data.error);
+    err.style.display="none";
+    render(data);
+  } catch(e){
+    if (e.name==="AbortError") return;
+    err.textContent="Query failed: "+e.message;
+    err.style.display="block";
+  } finally {
+    if (inflight===ctrl){ inflight=null;
+      content.classList.remove("loading"); }
+  }
+}
+
+function renderKPIs(t){
+  const items=[
+    ["Applications", fmt(t.apps)],
+    ["Denial rate", rate(t.apps,t.den)==null?"·":
+      fmt1(rate(t.apps,t.den))+"%"],
+    ["Originations", fmt(t.orig)],
+    ["Mean rate spread", mean(t.sp_n,t.sp_sum)==null?"·":
+      fmt2(mean(t.sp_n,t.sp_sum))+" ppt"],
+    ["High-priced share", rate(t.sp_n,t.hi_n)==null?"·":
+      fmt1(rate(t.sp_n,t.hi_n))+"%"],
+    ["Mean note rate", mean(t.ir_n,t.ir_sum)==null?"·":
+      fmt2(mean(t.ir_n,t.ir_sum))+"%"],
+    ["Pricing visible", t.apps?
+      fmt1(100*(1-t.exempt_n/t.apps))+"%":"·"],
+  ];
+  const el=document.getElementById("kpis");
+  el.replaceChildren();
+  for (const [label,value] of items){
+    const k=document.createElement("div"); k.className="kpi";
+    const l=document.createElement("div"); l.className="label";
+    l.textContent=label;
+    const v=document.createElement("div"); v.className="value";
+    v.textContent=value;
+    k.append(l,v); el.appendChild(k);
+  }
+}
+
+const CHART_CAP=12;
+function columns(svgId, items, unit, decimals){
+  const svg=document.getElementById(svgId);
+  svg.replaceChildren();
+  const W=svg.clientWidth||560, H=300, M={l:44,r:10,t:10,b:62};
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const NS=svg.namespaceURI;
+  const f=decimals===2?fmt2:fmt1;
+  const vals=items.map(x=>x.value).filter(x=>x!=null);
+  if (!vals.length){
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",W/2); t.setAttribute("y",H/2);
+    t.setAttribute("text-anchor","middle");
+    t.textContent="No data for this slice.";
+    svg.appendChild(t); return;
+  }
+  const raw=Math.max(...vals);
+  const ymax=raw<=1 ? (Math.ceil(raw*10)/10||0.1)
+                    : Math.max(5, Math.ceil(raw/5)*5);
+  const Y=v=>H-M.b - v/ymax*(H-M.t-M.b);
+  for (let g=0; g<=4; g++){
+    const gv=ymax*g/4;
+    const ln=document.createElementNS(NS,"line");
+    ln.setAttribute("class", g===0?"axisline":"gridline");
+    ln.setAttribute("x1",M.l); ln.setAttribute("x2",W-M.r);
+    ln.setAttribute("y1",Y(gv)); ln.setAttribute("y2",Y(gv));
+    svg.appendChild(ln);
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",M.l-5); t.setAttribute("y",Y(gv)+4);
+    t.setAttribute("text-anchor","end"); t.textContent=f(gv);
+    svg.appendChild(t);
+  }
+  const slot=(W-M.l-M.r)/items.length;
+  const bw=Math.min(24, slot*0.5);
+  items.forEach((x,i)=>{
+    const cx=M.l+(i+0.5)*slot;
+    const lbl=document.createElementNS(NS,"text");
+    lbl.setAttribute("x",cx); lbl.setAttribute("y",H-M.b+14);
+    lbl.setAttribute("text-anchor","end");
+    lbl.setAttribute("transform",`rotate(-30 ${cx} ${H-M.b+14})`);
+    lbl.textContent=x.label.length>18?x.label.slice(0,17)+"…":x.label;
+    svg.appendChild(lbl);
+    if (x.value==null){
+      const s=document.createElementNS(NS,"text");
+      s.setAttribute("x",cx); s.setAttribute("y",Y(0)-5);
+      s.setAttribute("text-anchor","middle"); s.textContent="·";
+      svg.appendChild(s); return;
+    }
+    const x0=cx-bw/2, y0=Y(x.value), y1=Y(0), rr=Math.min(4,bw/2);
+    const p=document.createElementNS(NS,"path");
+    p.setAttribute("d",`M ${x0} ${y1} L ${x0} ${y0+rr}
+      Q ${x0} ${y0} ${x0+rr} ${y0} L ${x0+bw-rr} ${y0}
+      Q ${x0+bw} ${y0} ${x0+bw} ${y0+rr} L ${x0+bw} ${y1} Z`);
+    p.setAttribute("fill","var(--series-1)");
+    p.addEventListener("pointermove", e=>showTip(e.clientX,e.clientY,[
+      [f(x.value)+unit, true],
+      [x.label+(x.n!=null?" · "+fmt(x.n)+" records":""), false]]));
+    p.addEventListener("pointerleave", hideTip);
+    svg.appendChild(p);
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("class","vallabel");
+    t.setAttribute("x",cx); t.setAttribute("y",y0-5);
+    t.setAttribute("text-anchor","middle");
+    t.textContent=f(x.value);
+    svg.appendChild(t);
+  });
+}
+
+function dimLabel(by){
+  return document.querySelector(`#fBy option[value="${by}"]`).textContent;
+}
+
+function render(data){
+  renderKPIs(data.total);
+  const label=dimLabel(data.by);
+  const top=data.rows.slice(0,CHART_CAP);
+  const capNote = data.rows.length>CHART_CAP
+    ? ` (top ${CHART_CAP} of ${data.row_count} by volume — full list in`
+      + " the table)" : "";
+  document.getElementById("chart1Title").textContent =
+    "Denial rate by "+label.toLowerCase();
+  document.getElementById("chart1Hint").textContent =
+    "Within the current slice"+capNote+".";
+  columns("chart1", top.map(x=>({label:x.name,
+    value:rate(x.apps,x.den), n:x.apps})), "% denied", 1);
+  document.getElementById("chart2Title").textContent =
+    "Mean rate spread by "+label.toLowerCase();
+  columns("chart2", top.map(x=>({label:x.name,
+    value:mean(x.sp_n,x.sp_sum), n:x.sp_n})), " ppt", 2);
+
+  document.getElementById("tblHint").textContent =
+    "Rows: "+label+" — every metric within the current slice.";
+  const heads=[[label,true],["Apps",false],["Share %",false],
+    ["Denial %",false],["Orig %",false],["Mean spread",false],
+    ["High-priced %",false],["HOEPA",false],["Mean rate %",false],
+    ["Pricing visible %",false]];
+  const head=document.getElementById("tblHead");
+  head.replaceChildren();
+  for (const [l,txt] of heads){
+    const th=document.createElement("th");
+    if (txt) th.className="txt"; th.textContent=l; head.appendChild(th);
+  }
+  const body=document.getElementById("tblBody");
+  body.replaceChildren();
+  const t=data.total;
+  const mk=m=>[
+    fmt(m.apps),
+    t.apps?fmt1(100*m.apps/t.apps)+"%":"·",
+    rate(m.apps,m.den)==null?"·":fmt1(rate(m.apps,m.den))+"%",
+    rate(m.apps,m.orig)==null?"·":fmt1(rate(m.apps,m.orig))+"%",
+    mean(m.sp_n,m.sp_sum)==null?"·":fmt2(mean(m.sp_n,m.sp_sum)),
+    rate(m.sp_n,m.hi_n)==null?"·":fmt1(rate(m.sp_n,m.hi_n))+"%",
+    fmt(m.hoepa_n),
+    mean(m.ir_n,m.ir_sum)==null?"·":fmt2(mean(m.ir_n,m.ir_sum)),
+    m.apps?fmt1(100*(1-m.exempt_n/m.apps))+"%":"·"];
+  const addRow=(name, m, bold)=>{
+    const tr=document.createElement("tr");
+    const td0=document.createElement("td");
+    td0.className="txt"; td0.textContent=name; td0.title=name;
+    if (bold) td0.style.fontWeight="600";
+    tr.appendChild(td0);
+    for (const cell of mk(m)){
+      const td=document.createElement("td");
+      if (bold) td.style.fontWeight="600";
+      td.textContent=cell; tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  };
+  for (const x of data.rows) addRow(x.name, x, false);
+  addRow("— ALL —", t, true);
+  document.getElementById("tblNote").textContent =
+    data.row_count>data.rows.length
+      ? `Showing ${data.rows.length.toLocaleString()} of `
+        + `${data.row_count.toLocaleString()} values by volume — add`
+        + " filters to narrow."
+      : `${data.rows.length.toLocaleString()} values.`;
+}
+
+async function main(){
+  bindTheme();
+  const res=await fetch("/api/meta");
+  META=await res.json();
+  SUP=META.suppress_n;
+  document.getElementById("supn").textContent=SUP;
+  document.getElementById("subtitle").textContent =
+    `Modified LAR ${META.year} · live database`
+    + (META.have_tracts?"":" · no tract table (run census step)");
+  document.title=`HMDA Slice Explorer — ${META.year}`;
+  initFilters();
+  refresh();
+}
+main();
+</script>
+</body>
+</html>
