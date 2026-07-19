@@ -56,6 +56,36 @@ Notes:
 - Optional: set a free Census API key (`setx CENSUS_API_KEY yourkey`)
   if the census step gets rate-limited.
 
+## Interactive tract explorer (`analyst-explorer` branch)
+
+For pattern-hunting that a static workbook can't do:
+
+```
+python run.py explore --year 2025
+```
+
+writes `outputs/explorer_{year}.html` — a **single self-contained file**
+(no server, no internet, shareable by email) that lets an analyst slice
+the tract-level data live:
+
+- Filters for state, county, tract minority-share band, state income
+  quintile, applicant group, and minimum volume — every chart, stat, and
+  table re-renders against the same slice.
+- A denial-rate vs. minority-share scatter (dot = tract, size = volume)
+  and a denial-by-band chart for spotting gradients.
+- A sortable tract table with a **Δ vs county** column — each tract's
+  denial rate against its county's overall rate for the selected group —
+  plus FIPS search to track down specific tracts.
+- Click any tract for a drill-down: demography, volumes, denial rate by
+  applicant group within that tract, and loan-type mix.
+
+Rates from fewer than 10 applications are suppressed (shown as ·) —
+tiny denominators mislead more than they inform. The full-national file
+embeds every tract with activity (roughly 85k), so expect a file in the
+~10 MB range; it loads locally in any modern browser. County display
+names appear automatically if the `county_language` table from the
+market-insights branch is present; otherwise counties show as FIPS codes.
+
 ## Demo without downloading anything
 
 ```

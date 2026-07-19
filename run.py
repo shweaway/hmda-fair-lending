@@ -9,6 +9,10 @@ Steps (run in order, or `all`):
   python run.py analyze    --year 2025            # run all five modules
   python run.py all        --year 2025
 
+Interactive output (separate deliverable, not part of `all`):
+  python run.py explore    --year 2025            # analyst tract explorer
+                                                  # (self-contained HTML)
+
 Useful flags:
   --limit N        download only the first N institutions (smoke test)
   --skip-puf       uad step: skip the appraisal-level PUF
@@ -28,6 +32,7 @@ from hmda import db as hdb               # noqa: E402
 from hmda import census as hcensus       # noqa: E402
 from hmda import report as hreport       # noqa: E402
 from hmda import uad as huad             # noqa: E402
+from hmda import explorer as hexplorer   # noqa: E402
 from hmda.analysis import (denials, pricing, redlining, institutions,  # noqa: E402
                            valuation)
 
@@ -70,11 +75,18 @@ def cmd_analyze(a):
     print(f"\nWrote:\n  {xlsx}\n  {html}\n  {len(charts)} charts in {out/'charts'}")
 
 
+def cmd_explore(a):
+    conn, engine = hdb.connect(a.db)
+    print(f"Engine: {engine}")
+    hexplorer.build(conn, engine, a.year,
+                    Path(a.out) / f"explorer_{a.year}.html")
+
+
 def main():
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("step", choices=["download", "load", "census", "uad",
-                                    "analyze", "all"])
+                                    "analyze", "explore", "all"])
     p.add_argument("--skip-puf", action="store_true",
                    help="uad step: aggregate statistics only, no "
                         "appraisal-level PUF")
@@ -92,7 +104,8 @@ def main():
     Path(a.data_dir).mkdir(parents=True, exist_ok=True)
 
     steps = {"download": cmd_download, "load": cmd_load,
-             "census": cmd_census, "uad": cmd_uad, "analyze": cmd_analyze}
+             "census": cmd_census, "uad": cmd_uad, "analyze": cmd_analyze,
+             "explore": cmd_explore}
     if a.step == "all":
         for s in ("download", "load", "census", "uad", "analyze"):
             print(f"\n=== {s.upper()} ===")

@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HMDA Tract Explorer</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --seq-250: #86b6ef;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --seq-250: #184f95;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --baseline: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --seq-250: #184f95;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 24px 60px; }
+header h1 { font-size: 20px; margin: 0 0 2px; }
+header .sub { color: var(--text-secondary); margin: 0 0 4px; }
+header .caveat { color: var(--muted); font-size: 12px; margin: 0; }
+.toolbar { display: flex; align-items: flex-end; gap: 12px; }
+.toolbar .grow { flex: 1; }
+button.theme {
+  background: var(--surface-1); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px;
+}
+.filters {
+  display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; margin: 16px 0;
+}
+.filters label {
+  display: flex; flex-direction: column; gap: 3px;
+  font-size: 11px; color: var(--text-secondary);
+}
+.filters select, .filters input {
+  font: inherit; font-size: 13px; color: var(--text-primary);
+  background: var(--page); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 8px; min-width: 110px;
+}
+.filters input[type=number] { width: 90px; min-width: 0; }
+.filters .reset {
+  background: none; border: none; color: var(--series-1);
+  cursor: pointer; font: inherit; font-size: 12px; padding: 6px 2px;
+}
+.kpis { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.kpi {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px; min-width: 130px;
+}
+.kpi .label { font-size: 11px; color: var(--text-secondary); }
+.kpi .value { font-size: 24px; font-weight: 600; }
+.cards { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; }
+@media (max-width: 900px) { .cards { grid-template-columns: 1fr; } }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 12px;
+}
+.card h2 { font-size: 14px; margin: 0 0 2px; }
+.card .hint { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+svg text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif;
+           fill: var(--muted); }
+svg .vallabel { fill: var(--text-secondary); font-variant-numeric: tabular-nums; }
+svg .gridline { stroke: var(--grid); stroke-width: 1; }
+svg .axisline { stroke: var(--baseline); stroke-width: 1; }
+.dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2;
+       cursor: pointer; }
+.dot.dim { opacity: 0.30; }
+.dot.sel { stroke: var(--text-primary); }
+.tooltip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.18); max-width: 260px;
+}
+.tooltip .tt-val { font-weight: 600; font-size: 14px; }
+.tooltip .tt-row { color: var(--text-secondary); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 5px 8px; text-align: right; white-space: nowrap; }
+th:first-child, td:first-child,
+th.txt, td.txt { text-align: left; }
+td { border-top: 1px solid var(--grid);
+     font-variant-numeric: tabular-nums; }
+th { color: var(--text-secondary); font-weight: 600; cursor: pointer;
+     user-select: none; border-bottom: 1px solid var(--baseline); }
+th .arrow { font-size: 10px; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: color-mix(in srgb, var(--series-1) 8%, transparent); }
+tbody tr.sel { background: color-mix(in srgb, var(--series-1) 16%, transparent); }
+tbody tr:focus-visible { outline: 2px solid var(--series-1); outline-offset: -2px; }
+.tablewrap { overflow-x: auto; }
+.tablenote { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; }
+@media (max-width: 700px) { .detail-grid { grid-template-columns: 1fr; } }
+.facts { font-size: 13px; }
+.facts div { display: flex; justify-content: space-between; gap: 16px;
+             padding: 3px 0; border-bottom: 1px solid var(--grid); }
+.facts span:first-child { color: var(--text-secondary); }
+.facts span:last-child { font-variant-numeric: tabular-nums; }
+.minibars .row { display: grid; grid-template-columns: 170px 1fr 78px;
+                 gap: 8px; align-items: center; padding: 3px 0;
+                 font-size: 12.5px; }
+.minibars .name { color: var(--text-secondary); overflow: hidden;
+                  text-overflow: ellipsis; white-space: nowrap; }
+.minibars .track { height: 16px; position: relative; }
+.minibars .bar { height: 16px; max-height: 24px; background: var(--series-1);
+                 border-radius: 0 4px 4px 0; min-width: 2px; }
+.minibars .val { color: var(--text-secondary); text-align: right;
+                 font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="toolbar">
+      <div class="grow">
+        <h1 id="title">HMDA Tract Explorer</h1>
+        <p class="sub" id="subtitle"></p>
+        <p class="caveat">Screening statistics from public HMDA data —
+        patterns here warrant scrutiny; they are not by themselves proof of
+        unlawful discrimination. Rates from fewer than
+        <span id="supn"></span> applications are suppressed (·).</p>
+      </div>
+      <button class="theme" id="themeBtn" type="button">Dark mode</button>
+    </div>
+  </header>
+
+  <div class="filters" id="filters">
+    <label>State
+      <select id="fState"><option value="">All states</option></select>
+    </label>
+    <label>County
+      <select id="fCounty"><option value="">All counties</option></select>
+    </label>
+    <label>Tract minority share
+      <select id="fBand"><option value="">All bands</option></select>
+    </label>
+    <label>Income quintile (state)
+      <select id="fIncq">
+        <option value="">All</option>
+        <option value="1">Q1 (lowest)</option><option value="2">Q2</option>
+        <option value="3">Q3</option><option value="4">Q4</option>
+        <option value="5">Q5 (highest)</option>
+      </select>
+    </label>
+    <label>Applicant group (metric)
+      <select id="fMetric"><option value="all">All applicants</option></select>
+    </label>
+    <label>Min applications
+      <input id="fMinApps" type="number" min="0" step="10" value="0">
+    </label>
+    <label>Tract FIPS search
+      <input id="fSearch" type="search" placeholder="e.g. 28049" size="12">
+    </label>
+    <button class="reset" id="fReset" type="button">Reset filters</button>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="cards">
+    <div class="card">
+      <h2>Denial rate vs. tract minority share</h2>
+      <p class="hint" id="scatterHint">Each dot is a tract; size = application
+      volume. Hover for details, click to inspect.</p>
+      <svg id="scatter" width="100%" height="380" role="img"
+           aria-label="Scatter plot of denial rate against tract minority share"></svg>
+    </div>
+    <div class="card">
+      <h2>Denial rate by minority band</h2>
+      <p class="hint">Aggregated over the current filter selection.</p>
+      <svg id="bands" width="100%" height="380" role="img"
+           aria-label="Bar chart of denial rate by tract minority share band"></svg>
+    </div>
+  </div>
+
+  <div class="card" id="detailCard" hidden>
+    <h2 id="detailTitle"></h2>
+    <p class="hint" id="detailHint"></p>
+    <div class="detail-grid">
+      <div>
+        <div class="facts" id="detailFacts"></div>
+        <h2 style="margin-top:14px">Loan type mix (applications)</h2>
+        <div class="minibars" id="detailLoanTypes"></div>
+      </div>
+      <div>
+        <h2>Denial rate by applicant group</h2>
+        <p class="hint">Within this tract. Suppressed under the minimum-n rule.</p>
+        <div class="minibars" id="detailGroups"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Tracts</h2>
+    <p class="hint">Click a column to sort; click a row to inspect.
+    Δ vs county = tract denial rate minus its county's overall rate
+    (percentage points), for the selected applicant group.</p>
+    <div class="tablewrap"><table id="tbl">
+      <thead><tr id="tblHead"></tr></thead>
+      <tbody id="tblBody"></tbody>
+    </table></div>
+    <p class="tablenote" id="tblNote"></p>
+  </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+
+const STATE_NAMES = {"01":"Alabama","02":"Alaska","04":"Arizona","05":"Arkansas",
+"06":"California","08":"Colorado","09":"Connecticut","10":"Delaware",
+"11":"District of Columbia","12":"Florida","13":"Georgia","15":"Hawaii",
+"16":"Idaho","17":"Illinois","18":"Indiana","19":"Iowa","20":"Kansas",
+"21":"Kentucky","22":"Louisiana","23":"Maine","24":"Maryland",
+"25":"Massachusetts","26":"Michigan","27":"Minnesota","28":"Mississippi",
+"29":"Missouri","30":"Montana","31":"Nebraska","32":"Nevada",
+"33":"New Hampshire","34":"New Jersey","35":"New Mexico","36":"New York",
+"37":"North Carolina","38":"North Dakota","39":"Ohio","40":"Oklahoma",
+"41":"Oregon","42":"Pennsylvania","44":"Rhode Island","45":"South Carolina",
+"46":"South Dakota","47":"Tennessee","48":"Texas","49":"Utah","50":"Vermont",
+"51":"Virginia","53":"Washington","54":"West Virginia","55":"Wisconsin",
+"56":"Wyoming","72":"Puerto Rico"};
+const BANDS = ["<10%","10-30%","30-50%","50-80%","80-100%"];
+
+const IDX = {}; DATA.cols.forEach((c,i)=>IDX[c]=i);
+const SUP = DATA.suppress_n;
+const rows = DATA.rows;
+const col = (r,name)=>r[IDX[name]];
+const stateOf = r=>col(r,"tract").slice(0,2);
+const countyOf = r=>col(r,"tract").slice(0,5);
+const countyName = f=>DATA.county_names[f] || f;
+const fmt = n=>n==null?"·":n.toLocaleString("en-US");
+const fmt1 = n=>n==null?"·":n.toLocaleString("en-US",{maximumFractionDigits:1});
+
+const state = { state:"", county:"", band:"", incq:"", metric:"all",
+                minApps:0, search:"", sortCol:"apps", sortDir:-1,
+                selected:null };
+
+function metricAD(r){
+  if (state.metric==="all") return [col(r,"apps"), col(r,"den")];
+  return [col(r,"a_"+state.metric), col(r,"d_"+state.metric)];
+}
+function rate(a,d){ return (a==null||a<SUP)?null:100*d/a; }
+
+/* county context: full-county rate per metric (not filter-scoped) */
+let countyRates = {};
+function computeCountyRates(){
+  const acc = {};
+  for (const r of rows){
+    const f = countyOf(r), [a,d] = metricAD(r);
+    (acc[f] ||= [0,0]); acc[f][0]+=a; acc[f][1]+=d;
+  }
+  countyRates = {};
+  for (const f in acc) countyRates[f] = rate(acc[f][0], acc[f][1]);
+}
+
+function filtered(){
+  return rows.filter(r=>{
+    if (state.state && stateOf(r)!==state.state) return false;
+    if (state.county && countyOf(r)!==state.county) return false;
+    if (state.band && col(r,"minority_band")!==state.band) return false;
+    if (state.incq && String(col(r,"income_q"))!==state.incq) return false;
+    if (state.search && !col(r,"tract").includes(state.search)) return false;
+    return metricAD(r)[0] >= state.minApps;
+  });
+}
+
+/* ---------- filters UI ---------- */
+function initFilters(){
+  const states = [...new Set(rows.map(stateOf))].sort();
+  const sSel = document.getElementById("fState");
+  for (const s of states){
+    const o = document.createElement("option");
+    o.value = s; o.textContent = STATE_NAMES[s] ? STATE_NAMES[s] : s;
+    sSel.appendChild(o);
+  }
+  const bSel = document.getElementById("fBand");
+  for (const b of BANDS){
+    const o = document.createElement("option");
+    o.value = b; o.textContent = b; bSel.appendChild(o);
+  }
+  const mSel = document.getElementById("fMetric");
+  for (const g of DATA.groups){
+    const o = document.createElement("option");
+    o.value = g; o.textContent = DATA.group_labels[g] || g;
+    mSel.appendChild(o);
+  }
+  rebuildCountyOptions();
+}
+function rebuildCountyOptions(){
+  const cSel = document.getElementById("fCounty");
+  while (cSel.options.length>1) cSel.remove(1);
+  const pool = state.state ? rows.filter(r=>stateOf(r)===state.state) : rows;
+  const counties = [...new Set(pool.map(countyOf))].sort();
+  for (const f of counties){
+    const o = document.createElement("option");
+    o.value = f; o.textContent = countyName(f); cSel.appendChild(o);
+  }
+}
+function bindFilters(){
+  const on = (id, ev, fn)=>document.getElementById(id)
+      .addEventListener(ev, e=>{ fn(e.target.value); render(); });
+  on("fState","change", v=>{ state.state=v; state.county="";
+      rebuildCountyOptions(); });
+  on("fCounty","change", v=>state.county=v);
+  on("fBand","change", v=>state.band=v);
+  on("fIncq","change", v=>state.incq=v);
+  on("fMetric","change", v=>{ state.metric=v; computeCountyRates(); });
+  on("fMinApps","input", v=>state.minApps=Math.max(0,+v||0));
+  on("fSearch","input", v=>state.search=v.trim());
+  document.getElementById("fReset").addEventListener("click", ()=>{
+    Object.assign(state,{state:"",county:"",band:"",incq:"",metric:"all",
+                         minApps:0,search:"",selected:null});
+    for (const id of ["fState","fCounty","fBand","fIncq","fMetric"])
+      document.getElementById(id).value = id==="fMetric"?"all":"";
+    document.getElementById("fMinApps").value = 0;
+    document.getElementById("fSearch").value = "";
+    rebuildCountyOptions(); computeCountyRates(); render();
+  });
+}
+
+/* ---------- tooltip ---------- */
+const tip = document.getElementById("tooltip");
+function showTip(x, y, lines){
+  tip.replaceChildren();
+  lines.forEach(([txt, strong])=>{
+    const d = document.createElement("div");
+    d.className = strong ? "tt-val" : "tt-row";
+    d.textContent = txt; tip.appendChild(d);
+  });
+  tip.style.display = "block";
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(x+14, innerWidth-w-8)+"px";
+  tip.style.top  = Math.min(y+14, innerHeight-h-8)+"px";
+}
+function hideTip(){ tip.style.display = "none"; }
+
+/* ---------- KPIs ---------- */
+function renderKPIs(rs){
+  const el = document.getElementById("kpis");
+  let a=0,d=0,o=0,v=0;
+  for (const r of rs){ const [ma,md]=metricAD(r); a+=ma; d+=md;
+    o+=col(r,"orig"); v+=col(r,"vol_mn"); }
+  const items = [
+    ["Applications", fmt(a)],
+    ["Denial rate", rate(a,d)==null?"·":fmt1(rate(a,d))+"%"],
+    ["Originations (all)", fmt(o)],
+    ["Volume (all)", "$"+fmt(Math.round(v))+"M"],
+    ["Tracts in view", fmt(rs.length)+" of "+fmt(rows.length)],
+  ];
+  el.replaceChildren();
+  for (const [label, value] of items){
+    const k = document.createElement("div"); k.className="kpi";
+    const l = document.createElement("div"); l.className="label";
+    l.textContent = label;
+    const val = document.createElement("div"); val.className="value";
+    val.textContent = value;
+    k.append(l,val); el.appendChild(k);
+  }
+}
+
+/* ---------- scatter ---------- */
+const SCATTER_CAP = 4000;
+let scatterPts = [];
+function renderScatter(rs){
+  const svg = document.getElementById("scatter");
+  svg.replaceChildren(); scatterPts = [];
+  const W = svg.clientWidth || 640, H = 380,
+        M = {l:44,r:12,t:8,b:34};
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  let pts = rs.filter(r=>col(r,"minority_pct")!=null
+                       && rate(...metricAD(r))!=null);
+  const hint = document.getElementById("scatterHint");
+  let capNote = "";
+  if (pts.length > SCATTER_CAP){
+    pts = [...pts].sort((x,y)=>metricAD(y)[0]-metricAD(x)[0])
+                  .slice(0,SCATTER_CAP);
+    capNote = ` Showing the ${SCATTER_CAP.toLocaleString()} highest-volume`
+            + ` of ${rs.length.toLocaleString()} tracts — filter to narrow.`;
+  }
+  hint.textContent = "Each dot is a tract; size = application volume. "
+                   + "Hover for details, click to inspect." + capNote;
+  if (!pts.length){
+    const t = document.createElementNS(svg.namespaceURI,"text");
+    t.setAttribute("x",W/2); t.setAttribute("y",H/2);
+    t.setAttribute("text-anchor","middle");
+    t.textContent = "No tracts match the current filters (or all rates "
+                  + "are suppressed).";
+    svg.appendChild(t); return;
+  }
+  const ymax = Math.max(10, Math.ceil(Math.max(
+      ...pts.map(r=>rate(...metricAD(r))))/5)*5);
+  const amax = Math.max(...pts.map(r=>metricAD(r)[0]));
+  const X = p=>M.l + p/100*(W-M.l-M.r);
+  const Y = v=>H-M.b - v/ymax*(H-M.t-M.b);
+  const R = a=>4 + 8*Math.sqrt(a/amax);
+  const NS = svg.namespaceURI;
+  for (let v=0; v<=ymax; v+=ymax/5){
+    const ln = document.createElementNS(NS,"line");
+    ln.setAttribute("class", v===0?"axisline":"gridline");
+    ln.setAttribute("x1",M.l); ln.setAttribute("x2",W-M.r);
+    ln.setAttribute("y1",Y(v)); ln.setAttribute("y2",Y(v));
+    svg.appendChild(ln);
+    const t = document.createElementNS(NS,"text");
+    t.setAttribute("x",M.l-6); t.setAttribute("y",Y(v)+4);
+    t.setAttribute("text-anchor","end"); t.textContent = fmt1(v)+"%";
+    svg.appendChild(t);
+  }
+  for (let p=0; p<=100; p+=25){
+    const t = document.createElementNS(NS,"text");
+    t.setAttribute("x",X(p)); t.setAttribute("y",H-M.b+16);
+    t.setAttribute("text-anchor","middle"); t.textContent = p+"%";
+    svg.appendChild(t);
+  }
+  const xl = document.createElementNS(NS,"text");
+  xl.setAttribute("x",(M.l+W-M.r)/2); xl.setAttribute("y",H-4);
+  xl.setAttribute("text-anchor","middle");
+  xl.textContent = "Tract minority population share";
+  svg.appendChild(xl);
+  for (const r of pts){
+    const cx = X(col(r,"minority_pct")), cy = Y(rate(...metricAD(r)));
+    const c = document.createElementNS(NS,"circle");
+    c.setAttribute("class","dot"
+      + (state.selected && state.selected!==col(r,"tract") ? " dim":"")
+      + (state.selected===col(r,"tract") ? " sel":""));
+    c.setAttribute("cx",cx); c.setAttribute("cy",cy);
+    c.setAttribute("r",R(metricAD(r)[0]));
+    svg.appendChild(c);
+    scatterPts.push({x:cx, y:cy, r});
+  }
+  svg.onpointermove = e=>{
+    const b = svg.getBoundingClientRect();
+    const mx = e.clientX-b.left, my = e.clientY-b.top;
+    let best=null, bd=24*24;
+    for (const p of scatterPts){
+      const dd=(p.x-mx)**2+(p.y-my)**2;
+      if (dd<bd){ bd=dd; best=p; }
+    }
+    if (!best){ hideTip(); return; }
+    const r = best.r, [a,d]=metricAD(r);
+    showTip(e.clientX, e.clientY, [
+      [fmt1(rate(a,d))+"% denial rate", true],
+      ["Tract "+col(r,"tract")+" — "+countyName(countyOf(r)), false],
+      ["Minority share "+fmt1(col(r,"minority_pct"))+"% · "
+        +fmt(a)+" applications", false],
+      ["Click to inspect", false],
+    ]);
+    svg.style.cursor = "pointer";
+  };
+  svg.onpointerleave = hideTip;
+  svg.onclick = e=>{
+    const b = svg.getBoundingClientRect();
+    const mx = e.clientX-b.left, my = e.clientY-b.top;
+    let best=null, bd=24*24;
+    for (const p of scatterPts){
+      const dd=(p.x-mx)**2+(p.y-my)**2;
+      if (dd<bd){ bd=dd; best=p; }
+    }
+    if (best){ selectTract(col(best.r,"tract")); }
+  };
+}
+
+/* ---------- band bar chart ---------- */
+function renderBands(rs){
+  const svg = document.getElementById("bands");
+  svg.replaceChildren();
+  const W = svg.clientWidth || 420, H = 380,
+        M = {l:44,r:12,t:8,b:34};
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const NS = svg.namespaceURI;
+  const agg = BANDS.map(b=>{
+    let a=0,d=0;
+    for (const r of rs) if (col(r,"minority_band")===b){
+      const [ma,md]=metricAD(r); a+=ma; d+=md; }
+    return {band:b, a, d, rate:rate(a,d)};
+  });
+  const vals = agg.map(x=>x.rate).filter(v=>v!=null);
+  if (!vals.length){
+    const t = document.createElementNS(NS,"text");
+    t.setAttribute("x",W/2); t.setAttribute("y",H/2);
+    t.setAttribute("text-anchor","middle");
+    t.textContent = "No data for the current filters.";
+    svg.appendChild(t); return;
+  }
+  const ymax = Math.max(10, Math.ceil(Math.max(...vals)/5)*5);
+  const Y = v=>H-M.b - v/ymax*(H-M.t-M.b);
+  const bw = Math.min(24, (W-M.l-M.r)/BANDS.length*0.55);
+  for (let v=0; v<=ymax; v+=ymax/5){
+    const ln = document.createElementNS(NS,"line");
+    ln.setAttribute("class", v===0?"axisline":"gridline");
+    ln.setAttribute("x1",M.l); ln.setAttribute("x2",W-M.r);
+    ln.setAttribute("y1",Y(v)); ln.setAttribute("y2",Y(v));
+    svg.appendChild(ln);
+    const t = document.createElementNS(NS,"text");
+    t.setAttribute("x",M.l-6); t.setAttribute("y",Y(v)+4);
+    t.setAttribute("text-anchor","end"); t.textContent = fmt1(v)+"%";
+    svg.appendChild(t);
+  }
+  agg.forEach((x,i)=>{
+    const cx = M.l + (i+0.5)*(W-M.l-M.r)/BANDS.length;
+    const lbl = document.createElementNS(NS,"text");
+    lbl.setAttribute("x",cx); lbl.setAttribute("y",H-M.b+16);
+    lbl.setAttribute("text-anchor","middle"); lbl.textContent = x.band;
+    svg.appendChild(lbl);
+    if (x.rate==null){
+      const s = document.createElementNS(NS,"text");
+      s.setAttribute("x",cx); s.setAttribute("y",Y(0)-6);
+      s.setAttribute("text-anchor","middle"); s.textContent="·";
+      svg.appendChild(s); return;
+    }
+    const x0 = cx-bw/2, y0 = Y(x.rate), y1 = Y(0), rr = Math.min(4,bw/2);
+    const p = document.createElementNS(NS,"path");
+    p.setAttribute("d",`M ${x0} ${y1} L ${x0} ${y0+rr}
+      Q ${x0} ${y0} ${x0+rr} ${y0} L ${x0+bw-rr} ${y0}
+      Q ${x0+bw} ${y0} ${x0+bw} ${y0+rr} L ${x0+bw} ${y1} Z`);
+    p.setAttribute("fill","var(--series-1)");
+    p.style.cursor = "default";
+    p.addEventListener("pointermove", e=>showTip(e.clientX,e.clientY,[
+      [fmt1(x.rate)+"% denial rate", true],
+      ["Band "+x.band+" · "+fmt(x.a)+" applications", false]]));
+    p.addEventListener("pointerleave", hideTip);
+    svg.appendChild(p);
+    const v = document.createElementNS(NS,"text");
+    v.setAttribute("class","vallabel");
+    v.setAttribute("x",cx); v.setAttribute("y",y0-5);
+    v.setAttribute("text-anchor","middle");
+    v.textContent = fmt1(x.rate)+"%";
+    svg.appendChild(v);
+  });
+  const xl = document.createElementNS(NS,"text");
+  xl.setAttribute("x",(M.l+W-M.r)/2); xl.setAttribute("y",H-4);
+  xl.setAttribute("text-anchor","middle");
+  xl.textContent = "Tract minority population share band";
+  svg.appendChild(xl);
+}
+
+/* ---------- table ---------- */
+const TBL_CAP = 1000;
+const COLS = [
+  {key:"tract", label:"Tract", txt:true, val:r=>col(r,"tract")},
+  {key:"state", label:"State", txt:true,
+   val:r=>STATE_NAMES[stateOf(r)]||stateOf(r)},
+  {key:"county", label:"County", txt:true, val:r=>countyName(countyOf(r))},
+  {key:"minority_pct", label:"Minority %", val:r=>col(r,"minority_pct")},
+  {key:"minority_band", label:"Band", txt:true,
+   val:r=>col(r,"minority_band")||"·"},
+  {key:"income_q", label:"Inc Q", val:r=>col(r,"income_q")},
+  {key:"median_income", label:"Med income", val:r=>col(r,"median_income")},
+  {key:"pop", label:"Pop", val:r=>col(r,"pop")},
+  {key:"apps", label:"Apps", val:r=>metricAD(r)[0]},
+  {key:"denial", label:"Denial %", val:r=>rate(...metricAD(r))},
+  {key:"delta", label:"Δ vs county (pp)", val:r=>{
+    const t = rate(...metricAD(r)), c = countyRates[countyOf(r)];
+    return (t==null||c==null)?null:t-c; }},
+];
+function renderTable(rs){
+  const head = document.getElementById("tblHead");
+  head.replaceChildren();
+  for (const c of COLS){
+    const th = document.createElement("th");
+    if (c.txt) th.className = "txt";
+    th.textContent = c.label;
+    if (state.sortCol===c.key){
+      const a = document.createElement("span");
+      a.className = "arrow";
+      a.textContent = state.sortDir<0 ? " ▼" : " ▲";
+      th.appendChild(a);
+    }
+    th.addEventListener("click", ()=>{
+      state.sortDir = state.sortCol===c.key ? -state.sortDir : -1;
+      state.sortCol = c.key; render();
+    });
+    head.appendChild(th);
+  }
+  const cdef = COLS.find(c=>c.key===state.sortCol) || COLS[8];
+  const sorted = [...rs].sort((a,b)=>{
+    const va = cdef.val(a), vb = cdef.val(b);
+    if (va==null && vb==null) return 0;
+    if (va==null) return 1; if (vb==null) return -1;
+    return (va<vb?-1:va>vb?1:0)*state.sortDir;
+  });
+  const body = document.getElementById("tblBody");
+  body.replaceChildren();
+  for (const r of sorted.slice(0,TBL_CAP)){
+    const tr = document.createElement("tr");
+    tr.tabIndex = 0;
+    if (state.selected===col(r,"tract")) tr.className = "sel";
+    for (const c of COLS){
+      const td = document.createElement("td");
+      if (c.txt) td.className = "txt";
+      const v = c.val(r);
+      td.textContent =
+        c.key==="denial" ? (v==null?"·":fmt1(v)+"%") :
+        c.key==="delta" ? (v==null?"·":(v>0?"+":"")+fmt1(v)) :
+        c.txt ? v : fmt(v);
+      tr.appendChild(td);
+    }
+    const pick = ()=>selectTract(col(r,"tract"));
+    tr.addEventListener("click", pick);
+    tr.addEventListener("keydown", e=>{
+      if (e.key==="Enter"||e.key===" "){ e.preventDefault(); pick(); }});
+    body.appendChild(tr);
+  }
+  const note = document.getElementById("tblNote");
+  note.textContent = sorted.length>TBL_CAP
+    ? `Showing ${TBL_CAP.toLocaleString()} of ${sorted.length.toLocaleString()}`
+      + " tracts — refine filters or search to narrow. Full data is in the"
+      + " analysis workbook."
+    : `${sorted.length.toLocaleString()} tracts.`;
+}
+
+/* ---------- drill-down ---------- */
+function miniBar(container, name, value, maxValue, display){
+  const row = document.createElement("div"); row.className="row";
+  const n = document.createElement("div"); n.className="name";
+  n.textContent = name; n.title = name;
+  const track = document.createElement("div"); track.className="track";
+  if (value!=null && maxValue>0){
+    const bar = document.createElement("div"); bar.className="bar";
+    bar.style.width = Math.max(1,(100*value/maxValue))+"%";
+    track.appendChild(bar);
+  }
+  const v = document.createElement("div"); v.className="val";
+  v.textContent = display;
+  row.append(n,track,v); container.appendChild(row);
+}
+function selectTract(t){
+  state.selected = state.selected===t ? null : t;
+  render();
+  if (state.selected)
+    document.getElementById("detailCard")
+            .scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+function renderDetail(){
+  const card = document.getElementById("detailCard");
+  const r = rows.find(x=>col(x,"tract")===state.selected);
+  if (!r){ card.hidden = true; return; }
+  card.hidden = false;
+  const cf = countyOf(r), cn = countyName(cf);
+  document.getElementById("detailTitle").textContent =
+    "Tract "+col(r,"tract")+" — "+cn
+    +(cn===cf ? ", "+(STATE_NAMES[stateOf(r)]||stateOf(r)) : "");
+  const cRate = countyRates[countyOf(r)];
+  document.getElementById("detailHint").textContent =
+    "County overall denial rate ("
+    +(state.metric==="all"?"all applicants":DATA.group_labels[state.metric])
+    +"): "+(cRate==null?"·":fmt1(cRate)+"%");
+  const facts = document.getElementById("detailFacts");
+  facts.replaceChildren();
+  const [ma,md] = metricAD(r);
+  const items = [
+    ["Minority population share", col(r,"minority_pct")==null?"·":
+      fmt1(col(r,"minority_pct"))+"%"],
+    ["Minority band", col(r,"minority_band")||"·"],
+    ["Median household income", col(r,"median_income")==null?"·":
+      "$"+fmt(col(r,"median_income"))],
+    ["Income quintile (in state)", fmt(col(r,"income_q"))],
+    ["Population", fmt(col(r,"pop"))],
+    ["Applications (selected group)", fmt(ma)],
+    ["Denial rate (selected group)",
+      rate(ma,md)==null?"·":fmt1(rate(ma,md))+"%"],
+    ["Originations (all)", fmt(col(r,"orig"))],
+    ["Origination volume (all)", "$"+fmt1(col(r,"vol_mn"))+"M"],
+  ];
+  for (const [k,v] of items){
+    const d = document.createElement("div");
+    const s1 = document.createElement("span"); s1.textContent = k;
+    const s2 = document.createElement("span"); s2.textContent = v;
+    d.append(s1,s2); facts.appendChild(d);
+  }
+  const gEl = document.getElementById("detailGroups");
+  gEl.replaceChildren();
+  const gRates = DATA.groups.map(g=>({
+    g, a: col(r,"a_"+g), rate: rate(col(r,"a_"+g), col(r,"d_"+g))}));
+  const gMax = Math.max(1,...gRates.map(x=>x.rate??0));
+  for (const x of gRates){
+    if (!x.a) continue;
+    miniBar(gEl, DATA.group_labels[x.g]||x.g, x.rate, gMax,
+      (x.rate==null?"·":fmt1(x.rate)+"%")+" ("+fmt(x.a)+")");
+  }
+  if (!gEl.children.length){
+    const d = document.createElement("div"); d.className="empty";
+    d.textContent = "No applications in this tract."; gEl.appendChild(d);
+  }
+  const ltEl = document.getElementById("detailLoanTypes");
+  ltEl.replaceChildren();
+  const lts = Object.entries(DATA.loan_types)
+    .map(([c,label])=>({label, n: col(r,"lt_"+c)}));
+  const ltMax = Math.max(1,...lts.map(x=>x.n));
+  for (const x of lts)
+    if (x.n) miniBar(ltEl, x.label, x.n, ltMax, fmt(x.n));
+}
+
+/* ---------- theme ---------- */
+function bindTheme(){
+  const btn = document.getElementById("themeBtn");
+  const cur = ()=>document.documentElement.dataset.theme
+    || (matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+  const sync = ()=>btn.textContent = cur()==="dark"?"Light mode":"Dark mode";
+  btn.addEventListener("click", ()=>{
+    document.documentElement.dataset.theme =
+      cur()==="dark" ? "light" : "dark";
+    sync();
+  });
+  sync();
+}
+
+/* ---------- main ---------- */
+function render(){
+  const rs = filtered();
+  renderKPIs(rs); renderScatter(rs); renderBands(rs);
+  renderTable(rs); renderDetail();
+}
+document.getElementById("subtitle").textContent =
+  `Modified LAR ${DATA.year} · ${rows.length.toLocaleString()} census tracts`
+  + " · all figures for the applicant group selected in the filter row";
+document.getElementById("supn").textContent = SUP;
+document.title = `HMDA Tract Explorer — ${DATA.year}`;
+initFilters(); bindFilters(); bindTheme();
+computeCountyRates(); render();
+let rT; addEventListener("resize", ()=>{
+  clearTimeout(rT); rT = setTimeout(render, 150); });
+</script>
+</body>
+</html>
