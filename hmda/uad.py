@@ -59,7 +59,9 @@ REQUIRED_AGG = ["geoid", "series", "year", "value"]
 KEEP_SERIES_RE = re.compile(
     r"below|contract|count|number|volume|median", re.I)
 # Keep only overall rows (no characteristic split) and purchase/all purpose.
-KEEP_GROUP_RE = re.compile(r"^$|all|total|none", re.I)
+# FHFA's actual sentinel for "no breakdown" is the literal string "No
+# Characteristic" (v3.3 files) -- not "All"/"Total"/"None" alone.
+KEEP_GROUP_RE = re.compile(r"^$|all|total|none|no characteristic", re.I)
 KEEP_PURPOSE_RE = re.compile(r"^$|purchase|all|total", re.I)
 
 AGG_COLS = ["channel", "geolevel", "geoid", "series", "purpose",
