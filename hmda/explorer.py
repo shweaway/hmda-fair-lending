@@ -24,6 +24,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pandas as pd
+
 from .constants import (GROUP_ORDER, GROUP_LABELS, LOAN_TYPE, LOAN_PURPOSE,
                         OCCUPANCY)
 
@@ -94,15 +96,15 @@ def build(conn, engine: str, year: int, out_path: str | Path) -> Path:
     rows = []
     for r in df.itertuples(index=False):
         row = [r.tract11,
-               None if r.minority_pct != r.minority_pct else
+               None if pd.isna(r.minority_pct) else
                round(float(r.minority_pct), 1),
-               None if r.minority_band != r.minority_band
+               None if pd.isna(r.minority_band)
                else r.minority_band,
-               None if r.income_quintile_state != r.income_quintile_state
+               None if pd.isna(r.income_quintile_state)
                else int(r.income_quintile_state),
-               None if r.median_income != r.median_income
+               None if pd.isna(r.median_income)
                else int(r.median_income),
-               None if r.total_pop != r.total_pop else int(r.total_pop),
+               None if pd.isna(r.total_pop) else int(r.total_pop),
                int(r.apps), int(r.orig), int(r.den),
                round(float(r.vol_mn or 0), 2)]
         for g in GROUP_ORDER:
