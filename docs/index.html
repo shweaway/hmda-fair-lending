@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HMDA Fair Lending Explorers — 2025</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif;
+         max-width: 760px; margin: 3rem auto; padding: 0 1.5rem; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  p.sub { color: #555; margin-top: 0; }
+  .card { display: block; border: 1px solid #ddd; border-radius: 8px;
+          padding: 1.1rem 1.3rem; margin: 1rem 0; text-decoration: none;
+          color: inherit; transition: border-color .15s; }
+  .card:hover { border-color: #888; }
+  .card h2 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+  .card p { margin: 0; color: #555; font-size: 0.92rem; }
+  footer { margin-top: 2.5rem; font-size: 0.82rem; color: #888; }
+</style>
+</head>
+<body>
+  <h1>HMDA Fair Lending Explorers</h1>
+  <p class="sub">2025 Modified LAR — every reporting institution, national coverage. Self-contained, interactive, no server.</p>
+
+  <a class="card" href="explorer_2025.html">
+    <h2>Tract Explorer — tracts × demography</h2>
+    <p>Filter by state, county, tract minority-share band, income quintile, applicant group. Denial-rate vs. minority-share scatter, per-tract drill-down.</p>
+  </a>
+
+  <a class="card" href="lenders_2025.html">
+    <h2>Lender Explorer — institutions × tracts × demography</h2>
+    <p>How each lender's footprint and denial rate compares to the market benchmark — the interactive redlining-screen view.</p>
+  </a>
+
+  <a class="card" href="loans_2025.html">
+    <h2>Loan Explorer — loan parameters × pricing</h2>
+    <p>Slice by loan type, purpose, occupancy, amount band, and applicant group. Denial rate, rate spread, pricing visibility.</p>
+  </a>
+
+  <footer>
+    Source: CFPB HMDA Modified LAR. Screening tool, not proof of discrimination —
+    see the <a href="https://github.com/shweaway/hmda-fair-lending">repository README</a> for methodology and caveats.
+  </footer>
+</body>
+</html>
