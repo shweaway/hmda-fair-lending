@@ -56,6 +56,85 @@ Notes:
 - Optional: set a free Census API key (`setx CENSUS_API_KEY yourkey`)
   if the census step gets rate-limited.
 
+## Interactive explorers (`analyst-explorer` branch)
+
+For pattern-hunting that a static workbook can't do:
+
+```
+python run.py explore --year 2025
+```
+
+writes three **single self-contained HTML files** (no server, no
+internet, shareable by email) to `outputs/`:
+
+### `explorer_{year}.html` — tracts × demography
+
+- Filters for state, county, tract minority-share band, state income
+  quintile, applicant group, and minimum volume — every chart, stat, and
+  table re-renders against the same slice.
+- A denial-rate vs. minority-share scatter (dot = tract, size = volume)
+  and a denial-by-band chart for spotting gradients.
+- A sortable tract table with a **Δ vs county** column — each tract's
+  denial rate against its county's overall rate for the selected group —
+  plus FIPS search to track down specific tracts.
+- Click any tract for a drill-down: demography, volumes, denial rate by
+  applicant group within that tract, and loan-type mix.
+
+### `lenders_{year}.html` — institutions × tracts × demography
+
+How each lender performs against the market benchmark (every lender in
+the current state scope):
+
+- A footprint scatter: each lender's share of applications from
+  majority-minority tracts vs. its denial rate, with the market's share
+  as a reference line — the interactive version of the DOJ/CFPB-style
+  redlining screen.
+- A sortable lender table: volume, denial rate, MM-tract share and Δ vs
+  market, Black–White denial gap, and EGRRCPA pricing-exempt share.
+- Click a lender for a drill-down: side-by-side lender-vs-market bars
+  for application share by tract minority band and denial rate by
+  applicant group, plus a fact sheet.
+
+### `loans_{year}.html` — loan parameters × pricing
+
+Slice by loan type (channel), purpose, occupancy, loan-amount band, and
+applicant group; every stat, chart, and table follows the slice:
+
+- KPIs: denial rate, mean rate spread over APOR, high-priced share
+  (≥1.5 ppt), mean note rate, and **pricing visible %** — how much of
+  the slice the EGRRCPA exemption leaves dark.
+- Denial rate by amount band and mean rate spread by group, recomputed
+  within the slice.
+- A pivot table: choose the breakdown dimension (amount, type, purpose,
+  occupancy, group) and read denial, origination, spread, high-priced,
+  HOEPA, and pricing-visibility per row. Pricing stats cover originated
+  first-lien loans with reported pricing, matching the `pricing` module.
+
+### `run.py serve` — unified slice explorer (every filter combined)
+
+The three files above embed pre-aggregated cubes, which caps how many
+dimensions can cross. For arbitrary combinations, run the local web app:
+
+```
+python run.py serve --year 2025          # opens http://127.0.0.1:8600
+```
+
+It queries the DuckDB/SQLite database live (localhost only, stdlib
+HTTP server, no new dependencies), so **any** combination of geography
+(state, county, tract minority band, income quintile), lender, loan
+parameters (type, purpose, occupancy, amount band), and applicant group
+works — with any of those as the "split by" dimension. KPIs, denial and
+rate-spread charts, and a full-metric breakdown table follow the slice.
+Example: Redline-screen a single lender's conventional lending inside
+80-100% minority tracts, split by applicant group — one query.
+
+Rates from fewer than 10 applications are suppressed (shown as ·) —
+tiny denominators mislead more than they inform. The full-national file
+embeds every tract with activity (roughly 85k), so expect a file in the
+~10 MB range; it loads locally in any modern browser. County display
+names appear automatically if the `county_language` table from the
+market-insights branch is present; otherwise counties show as FIPS codes.
+
 ## Demo without downloading anything
 
 ```

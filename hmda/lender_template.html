@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HMDA Lender Explorer</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --context: #898781;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --context: #898781;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --baseline: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --context: #898781;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 24px 60px; }
+header h1 { font-size: 20px; margin: 0 0 2px; }
+header .sub { color: var(--text-secondary); margin: 0 0 4px; }
+header .caveat { color: var(--muted); font-size: 12px; margin: 0; }
+.toolbar { display: flex; align-items: flex-end; gap: 12px; }
+.toolbar .grow { flex: 1; }
+button.theme { background: var(--surface-1); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px 14px;
+  align-items: flex-end; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; margin: 16px 0; }
+.filters label { display: flex; flex-direction: column; gap: 3px;
+  font-size: 11px; color: var(--text-secondary); }
+.filters select, .filters input { font: inherit; font-size: 13px;
+  color: var(--text-primary); background: var(--page);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 8px; min-width: 110px; }
+.filters input[type=number] { width: 90px; min-width: 0; }
+.filters .reset { background: none; border: none; color: var(--series-1);
+  cursor: pointer; font: inherit; font-size: 12px; padding: 6px 2px; }
+.kpis { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.kpi { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px; min-width: 130px; }
+.kpi .label { font-size: 11px; color: var(--text-secondary); }
+.kpi .value { font-size: 24px; font-weight: 600; }
+.card { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.card h2 { font-size: 14px; margin: 0 0 2px; }
+.card .hint { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+.cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .cards2 { grid-template-columns: 1fr; } }
+svg text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif;
+  fill: var(--muted); }
+svg .vallabel { fill: var(--text-secondary);
+  font-variant-numeric: tabular-nums; }
+svg .gridline { stroke: var(--grid); stroke-width: 1; }
+svg .axisline { stroke: var(--baseline); stroke-width: 1; }
+svg .refline { stroke: var(--context); stroke-width: 1;
+  stroke-dasharray: none; }
+.dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2;
+  cursor: pointer; }
+.dot.dim { opacity: 0.30; }
+.dot.sel { stroke: var(--text-primary); }
+.legend { display: flex; gap: 16px; font-size: 12px;
+  color: var(--text-secondary); margin: 2px 0 6px; }
+.legend .key { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw { width: 12px; height: 12px; border-radius: 3px;
+  display: inline-block; }
+.tooltip { position: fixed; pointer-events: none; z-index: 10;
+  display: none; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.18); max-width: 280px; }
+.tooltip .tt-val { font-weight: 600; font-size: 14px; }
+.tooltip .tt-row { color: var(--text-secondary); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 5px 8px; text-align: right; white-space: nowrap; }
+th.txt, td.txt { text-align: left; }
+td { border-top: 1px solid var(--grid);
+  font-variant-numeric: tabular-nums; }
+td.txt { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+th { color: var(--text-secondary); font-weight: 600; cursor: pointer;
+  user-select: none; border-bottom: 1px solid var(--baseline); }
+th .arrow { font-size: 10px; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: color-mix(in srgb, var(--series-1) 8%, transparent); }
+tbody tr.sel { background: color-mix(in srgb, var(--series-1) 16%, transparent); }
+tbody tr:focus-visible { outline: 2px solid var(--series-1);
+  outline-offset: -2px; }
+.tablewrap { overflow-x: auto; }
+.tablenote { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+.facts { font-size: 13px; }
+.facts div { display: flex; justify-content: space-between; gap: 16px;
+  padding: 3px 0; border-bottom: 1px solid var(--grid); }
+.facts span:first-child { color: var(--text-secondary); }
+.facts span:last-child { font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="toolbar">
+      <div class="grow">
+        <h1>HMDA Lender Explorer</h1>
+        <p class="sub" id="subtitle"></p>
+        <p class="caveat">Screening statistics from public HMDA data —
+        patterns warrant scrutiny, not conclusions. The market benchmark is
+        every lender in the current state scope. Rates from fewer than
+        <span id="supn"></span> applications are suppressed (·).</p>
+      </div>
+      <button class="theme" id="themeBtn" type="button">Dark mode</button>
+    </div>
+  </header>
+
+  <div class="filters">
+    <label>State
+      <select id="fState"><option value="">All states</option></select>
+    </label>
+    <label>Min applications
+      <input id="fMinApps" type="number" min="0" step="25" value="25">
+    </label>
+    <label>Lender search
+      <input id="fSearch" type="search" placeholder="name or LEI" size="24">
+    </label>
+    <button class="reset" id="fReset" type="button">Reset</button>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card">
+    <h2>Majority-minority footprint vs. denial rate</h2>
+    <p class="hint" id="scatterHint">Each dot is a lender (size = volume).
+    X: share of its applications from majority-minority tracts (50%+
+    minority). The vertical line is the market's share — lenders far left
+    of it lend less in majority-minority neighborhoods than the market
+    does. Click a dot to inspect.</p>
+    <svg id="scatter" width="100%" height="360" role="img"
+     aria-label="Scatter of majority-minority application share against denial rate per lender"></svg>
+  </div>
+
+  <div class="card" id="detailCard" hidden>
+    <h2 id="detailTitle"></h2>
+    <p class="hint" id="detailHint"></p>
+    <div class="cards2">
+      <div>
+        <div class="facts" id="detailFacts"></div>
+      </div>
+      <div>
+        <h2>Footprint by tract minority share</h2>
+        <p class="hint">Share of applications in each band.</p>
+        <div class="legend" id="legend1"></div>
+        <svg id="bandChart" width="100%" height="230" role="img"
+         aria-label="Lender vs market application share by tract minority band"></svg>
+        <h2 style="margin-top:10px">Denial rate by applicant group</h2>
+        <div class="legend" id="legend2"></div>
+        <svg id="groupChart" width="100%" height="230" role="img"
+         aria-label="Lender vs market denial rate by applicant group"></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Lenders</h2>
+    <p class="hint">Click a column to sort; click a row to inspect.
+    MM share = share of applications from majority-minority (50%+) tracts;
+    Δ = lender minus market (pp). B–W gap = Black denial rate minus White
+    denial rate (pp). Exempt % = records with EGRRCPA-exempt pricing.
+    Excl. 4–8 = withdrawn, closed-incomplete, purchased, and preapproval
+    records at this institution — not counted in Apps/Orig/Denial % (see
+    scope note below).</p>
+    <div class="tablewrap"><table>
+      <thead><tr id="tblHead"></tr></thead>
+      <tbody id="tblBody"></tbody>
+    </table></div>
+    <p class="tablenote" id="tblNote"></p>
+  </div>
+
+  <p class="tablenote" id="scopeNote">
+    <strong>Scope note:</strong> Apps, Orig, and Denial % on this page cover
+    only consumer-purpose records where the institution reached a credit
+    decision — HMDA action-taken codes 1 (loan originated), 2 (approved but
+    not accepted), and 3 (application denied). Applications withdrawn by
+    the applicant (4), files closed for incompleteness (5), loans the
+    institution purchased rather than originated (6), and preapproval
+    requests (7, 8) are excluded from those figures; they are counted
+    separately in the "Excl. 4–8" column. Business/commercial-purpose
+    records are excluded entirely. This mirrors the standard denial-rate
+    methodology used in CFPB and academic HMDA research, but it means these
+    totals will read lower than a raw count of every record an institution
+    reported.
+  </p>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+
+const IDX = {}; DATA.cols.forEach((c,i)=>IDX[c]=i);
+const SUP = DATA.suppress_n;
+const NB = DATA.bands.length;
+const fmt = n=>n==null?"·":n.toLocaleString("en-US");
+const fmt1 = n=>n==null?"·":n.toLocaleString("en-US",{maximumFractionDigits:1});
+const rate = (a,d)=>(a==null||a<SUP)?null:100*d/a;
+const state = { state:"", minApps:25, search:"", sortCol:"apps",
+                sortDir:-1, selected:null };
+
+/* aggregate (lei,state) rows into lender objects within scope */
+const NUMSTART = 2;                       // cols 0,1 = lei,state
+function blank(){ return DATA.cols.slice(NUMSTART).map(()=>0); }
+function aggregate(rows){
+  const map = new Map();
+  for (const r of rows){
+    let acc = map.get(r[0]);
+    if (!acc){ acc = blank(); map.set(r[0], acc); }
+    for (let i=NUMSTART;i<r.length;i++) acc[i-NUMSTART]+=r[i];
+  }
+  return map;
+}
+function v(acc, name){ return acc[IDX[name]-NUMSTART]; }
+function scoped(){
+  return state.state
+    ? DATA.rows.filter(r=>r[1]===state.state) : DATA.rows;
+}
+let lenders = new Map(), market = null;
+function recompute(){
+  const rows = scoped();
+  lenders = aggregate(rows);
+  market = blank();
+  for (const acc of lenders.values())
+    for (let i=0;i<market.length;i++) market[i]+=acc[i];
+}
+function mmShare(acc){
+  const a = v(acc,"apps");
+  if (!a) return null;
+  let mm = 0;
+  for (let i=3;i<NB;i++) mm += v(acc,"ba_"+i);
+  return 100*mm/a;
+}
+function bwGap(acc){
+  const w = rate(v(acc,"a_white"), v(acc,"d_white"));
+  const b = rate(v(acc,"a_black"), v(acc,"d_black"));
+  return (w==null||b==null)?null:b-w;
+}
+function lenderList(){
+  const out = [];
+  const q = state.search.toLowerCase();
+  for (const [lei, acc] of lenders){
+    if (v(acc,"apps") < state.minApps) continue;
+    const name = DATA.names[lei] || "";
+    if (q && !lei.toLowerCase().includes(q)
+          && !name.toLowerCase().includes(q)) continue;
+    out.push({lei, name, acc});
+  }
+  return out;
+}
+
+/* ---------- tooltip / theme ---------- */
+const tip = document.getElementById("tooltip");
+function showTip(x,y,lines){
+  tip.replaceChildren();
+  for (const [txt, strong] of lines){
+    const d = document.createElement("div");
+    d.className = strong?"tt-val":"tt-row";
+    d.textContent = txt; tip.appendChild(d);
+  }
+  tip.style.display="block";
+  tip.style.left = Math.min(x+14, innerWidth-tip.offsetWidth-8)+"px";
+  tip.style.top = Math.min(y+14, innerHeight-tip.offsetHeight-8)+"px";
+}
+const hideTip = ()=>tip.style.display="none";
+function bindTheme(){
+  const btn = document.getElementById("themeBtn");
+  const cur = ()=>document.documentElement.dataset.theme
+    || (matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+  const sync = ()=>btn.textContent = cur()==="dark"?"Light mode":"Dark mode";
+  btn.addEventListener("click", ()=>{
+    document.documentElement.dataset.theme = cur()==="dark"?"light":"dark";
+    sync(); });
+  sync();
+}
+
+/* ---------- KPIs ---------- */
+function renderKPIs(list){
+  const el = document.getElementById("kpis");
+  const mRate = rate(v(market,"apps"), v(market,"den"));
+  const items = [
+    ["Lenders in view", fmt(list.length)+" of "+fmt(lenders.size)],
+    ["Market applications", fmt(v(market,"apps"))],
+    ["Market denial rate", mRate==null?"·":fmt1(mRate)+"%"],
+    ["Market MM-tract share", fmt1(mmShare(market))+"%"],
+    ["Pricing-exempt records",
+     fmt1(100*v(market,"exempt_n")/Math.max(1,v(market,"apps")))+"%"],
+  ];
+  el.replaceChildren();
+  for (const [label, value] of items){
+    const k=document.createElement("div"); k.className="kpi";
+    const l=document.createElement("div"); l.className="label";
+    l.textContent=label;
+    const val=document.createElement("div"); val.className="value";
+    val.textContent=value;
+    k.append(l,val); el.appendChild(k);
+  }
+}
+
+/* ---------- scatter ---------- */
+const SCATTER_CAP = 2000;
+let pts = [];
+function renderScatter(list){
+  const svg = document.getElementById("scatter");
+  svg.replaceChildren(); pts = [];
+  const W = svg.clientWidth||900, H=360, M={l:44,r:14,t:10,b:36};
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const NS = svg.namespaceURI;
+  let use = list.filter(x=>mmShare(x.acc)!=null
+    && rate(v(x.acc,"apps"), v(x.acc,"den"))!=null);
+  const hint = document.getElementById("scatterHint");
+  let note = "";
+  if (use.length>SCATTER_CAP){
+    use = [...use].sort((a,b)=>v(b.acc,"apps")-v(a.acc,"apps"))
+                  .slice(0,SCATTER_CAP);
+    note = ` Showing the ${SCATTER_CAP.toLocaleString()} largest of `
+         + `${list.length.toLocaleString()} lenders — filter to narrow.`;
+  }
+  hint.textContent = "Each dot is a lender (size = volume). X: share of "
+    + "its applications from majority-minority tracts (50%+ minority). "
+    + "The vertical line is the market's share — lenders far left of it "
+    + "lend less in majority-minority neighborhoods than the market "
+    + "does. Click a dot to inspect." + note;
+  if (!use.length){
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",W/2); t.setAttribute("y",H/2);
+    t.setAttribute("text-anchor","middle");
+    t.textContent="No lenders match the current filters.";
+    svg.appendChild(t); return;
+  }
+  const ymax = Math.max(10, Math.ceil(Math.max(...use.map(
+    x=>rate(v(x.acc,"apps"),v(x.acc,"den"))))/5)*5);
+  const xmax = Math.max(20, Math.ceil(Math.max(mmShare(market)||0,
+    ...use.map(x=>mmShare(x.acc)))/10)*10);
+  const amax = Math.max(...use.map(x=>v(x.acc,"apps")));
+  const X = p=>M.l + p/xmax*(W-M.l-M.r);
+  const Y = r=>H-M.b - r/ymax*(H-M.t-M.b);
+  const R = a=>4 + 8*Math.sqrt(a/amax);
+  for (let g=0; g<=ymax; g+=ymax/5){
+    const ln=document.createElementNS(NS,"line");
+    ln.setAttribute("class", g===0?"axisline":"gridline");
+    ln.setAttribute("x1",M.l); ln.setAttribute("x2",W-M.r);
+    ln.setAttribute("y1",Y(g)); ln.setAttribute("y2",Y(g));
+    svg.appendChild(ln);
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",M.l-6); t.setAttribute("y",Y(g)+4);
+    t.setAttribute("text-anchor","end"); t.textContent=fmt1(g)+"%";
+    svg.appendChild(t);
+  }
+  for (let p=0; p<=xmax; p+=xmax/5){
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",X(p)); t.setAttribute("y",H-M.b+16);
+    t.setAttribute("text-anchor","middle"); t.textContent=fmt1(p)+"%";
+    svg.appendChild(t);
+  }
+  const mkt = mmShare(market);
+  if (mkt!=null){
+    const ln=document.createElementNS(NS,"line");
+    ln.setAttribute("class","refline");
+    ln.setAttribute("x1",X(mkt)); ln.setAttribute("x2",X(mkt));
+    ln.setAttribute("y1",M.t); ln.setAttribute("y2",H-M.b);
+    svg.appendChild(ln);
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",X(mkt)+4); t.setAttribute("y",M.t+10);
+    t.textContent="market "+fmt1(mkt)+"%";
+    svg.appendChild(t);
+  }
+  const xl=document.createElementNS(NS,"text");
+  xl.setAttribute("x",(M.l+W-M.r)/2); xl.setAttribute("y",H-4);
+  xl.setAttribute("text-anchor","middle");
+  xl.textContent="Share of applications from majority-minority tracts";
+  svg.appendChild(xl);
+  for (const x of use){
+    const cx=X(mmShare(x.acc)),
+          cy=Y(rate(v(x.acc,"apps"),v(x.acc,"den")));
+    const c=document.createElementNS(NS,"circle");
+    c.setAttribute("class","dot"
+      + (state.selected && state.selected!==x.lei?" dim":"")
+      + (state.selected===x.lei?" sel":""));
+    c.setAttribute("cx",cx); c.setAttribute("cy",cy);
+    c.setAttribute("r",R(v(x.acc,"apps")));
+    svg.appendChild(c);
+    pts.push({x:cx,y:cy,l:x});
+  }
+  const nearest=(e)=>{
+    const b=svg.getBoundingClientRect();
+    const mx=e.clientX-b.left, my=e.clientY-b.top;
+    let best=null, bd=24*24;
+    for (const p of pts){
+      const dd=(p.x-mx)**2+(p.y-my)**2;
+      if (dd<bd){bd=dd;best=p;}
+    }
+    return best;
+  };
+  svg.onpointermove = e=>{
+    const p=nearest(e);
+    if (!p){hideTip();return;}
+    const a=v(p.l.acc,"apps"), d=v(p.l.acc,"den");
+    showTip(e.clientX,e.clientY,[
+      [p.l.name||p.l.lei, true],
+      [fmt1(rate(a,d))+"% denial · "+fmt1(mmShare(p.l.acc))
+        +"% MM share", false],
+      [fmt(a)+" applications · click to inspect", false]]);
+  };
+  svg.onpointerleave = hideTip;
+  svg.onclick = e=>{ const p=nearest(e); if (p) select(p.l.lei); };
+}
+
+/* ---------- paired-bar charts (lender vs market) ---------- */
+function legend(el){
+  const box=document.getElementById(el);
+  box.replaceChildren();
+  for (const [label, color] of [["Lender","var(--series-1)"],
+                                ["Market","var(--context)"]]){
+    const k=document.createElement("span"); k.className="key";
+    const sw=document.createElement("span"); sw.className="sw";
+    sw.style.background=color;
+    k.append(sw, document.createTextNode(label));
+    box.appendChild(k);
+  }
+}
+function pairedBars(svgId, cats, lenderVals, marketVals, unit){
+  const svg=document.getElementById(svgId);
+  svg.replaceChildren();
+  const W=svg.clientWidth||520, H=230, M={l:40,r:8,t:8,b:32};
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const NS=svg.namespaceURI;
+  const all=[...lenderVals,...marketVals].filter(x=>x!=null);
+  if (!all.length){
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",W/2); t.setAttribute("y",H/2);
+    t.setAttribute("text-anchor","middle");
+    t.textContent="No data."; svg.appendChild(t); return;
+  }
+  const ymax=Math.max(10, Math.ceil(Math.max(...all)/5)*5);
+  const Y=r=>H-M.b - r/ymax*(H-M.t-M.b);
+  for (let g=0; g<=ymax; g+=ymax/4){
+    const ln=document.createElementNS(NS,"line");
+    ln.setAttribute("class", g===0?"axisline":"gridline");
+    ln.setAttribute("x1",M.l); ln.setAttribute("x2",W-M.r);
+    ln.setAttribute("y1",Y(g)); ln.setAttribute("y2",Y(g));
+    svg.appendChild(ln);
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",M.l-5); t.setAttribute("y",Y(g)+4);
+    t.setAttribute("text-anchor","end");
+    t.textContent=fmt1(g); svg.appendChild(t);
+  }
+  const slot=(W-M.l-M.r)/cats.length;
+  const bw=Math.min(18, slot*0.28);
+  cats.forEach((cat,i)=>{
+    const cx=M.l+(i+0.5)*slot;
+    const lbl=document.createElementNS(NS,"text");
+    lbl.setAttribute("x",cx); lbl.setAttribute("y",H-M.b+15);
+    lbl.setAttribute("text-anchor","middle"); lbl.textContent=cat;
+    svg.appendChild(lbl);
+    const draw=(val,off,color)=>{
+      if (val==null){
+        const s=document.createElementNS(NS,"text");
+        s.setAttribute("x",cx+off); s.setAttribute("y",Y(0)-4);
+        s.setAttribute("text-anchor","middle"); s.textContent="·";
+        svg.appendChild(s); return;
+      }
+      const x0=cx+off-bw/2, y0=Y(val), y1=Y(0),
+            rr=Math.min(4,bw/2);
+      const p=document.createElementNS(NS,"path");
+      p.setAttribute("d",`M ${x0} ${y1} L ${x0} ${y0+rr}
+        Q ${x0} ${y0} ${x0+rr} ${y0} L ${x0+bw-rr} ${y0}
+        Q ${x0+bw} ${y0} ${x0+bw} ${y0+rr} L ${x0+bw} ${y1} Z`);
+      p.setAttribute("fill",color);
+      p.addEventListener("pointermove", e=>showTip(e.clientX,e.clientY,[
+        [fmt1(val)+unit, true],
+        [cat+" — "+(off<0?"lender":"market"), false]]));
+      p.addEventListener("pointerleave", hideTip);
+      svg.appendChild(p);
+    };
+    draw(lenderVals[i], -bw/2-1, "var(--series-1)");
+    draw(marketVals[i],  bw/2+1, "var(--context)");
+    if (lenderVals[i]!=null){
+      const t=document.createElementNS(NS,"text");
+      t.setAttribute("class","vallabel");
+      t.setAttribute("x",cx-bw/2-1); t.setAttribute("y",Y(lenderVals[i])-4);
+      t.setAttribute("text-anchor","middle");
+      t.textContent=fmt1(lenderVals[i]);
+      svg.appendChild(t);
+    }
+  });
+}
+
+/* ---------- detail ---------- */
+function select(lei){
+  state.selected = state.selected===lei?null:lei;
+  render();
+  if (state.selected)
+    document.getElementById("detailCard")
+      .scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+function renderDetail(){
+  const card=document.getElementById("detailCard");
+  const acc = state.selected ? lenders.get(state.selected) : null;
+  if (!acc){ card.hidden=true; return; }
+  card.hidden=false;
+  const name = DATA.names[state.selected]||"";
+  document.getElementById("detailTitle").textContent =
+    (name?name+" — ":"")+state.selected;
+  document.getElementById("detailHint").textContent =
+    "Compared with every lender in the current state scope"
+    + (state.state?` (${state.state})`:" (national)")+".";
+  const facts=document.getElementById("detailFacts");
+  facts.replaceChildren();
+  const a=v(acc,"apps"), d=v(acc,"den");
+  const mmL=mmShare(acc), mmM=mmShare(market);
+  const items=[
+    ["Applications", fmt(a)],
+    ["Originations", fmt(v(acc,"orig"))],
+    ["Origination volume", "$"+fmt(Math.round(v(acc,"vol_mn")))+"M"],
+    ["Denial rate", rate(a,d)==null?"·":fmt1(rate(a,d))+"%"],
+    ["Market denial rate",
+     fmt1(rate(v(market,"apps"),v(market,"den")))+"%"],
+    ["MM-tract share", mmL==null?"·":fmt1(mmL)+"%"],
+    ["Market MM-tract share", mmM==null?"·":fmt1(mmM)+"%"],
+    ["MM share Δ vs market (pp)", (mmL==null||mmM==null)?"·":
+      (mmL-mmM>0?"+":"")+fmt1(mmL-mmM)],
+    ["Black–White denial gap (pp)", bwGap(acc)==null?"·":
+      (bwGap(acc)>0?"+":"")+fmt1(bwGap(acc))],
+    ["Pricing-exempt records",
+     fmt1(100*v(acc,"exempt_n")/Math.max(1,a))+"%"],
+  ];
+  for (const [k,val] of items){
+    const dv=document.createElement("div");
+    const s1=document.createElement("span"); s1.textContent=k;
+    const s2=document.createElement("span"); s2.textContent=val;
+    dv.append(s1,s2); facts.appendChild(dv);
+  }
+  legend("legend1"); legend("legend2");
+  const shr=(acc2,i)=>{
+    const t=v(acc2,"apps");
+    return t?100*v(acc2,"ba_"+i)/t:null;
+  };
+  pairedBars("bandChart", DATA.bands,
+    DATA.bands.map((_,i)=>shr(acc,i)),
+    DATA.bands.map((_,i)=>shr(market,i)), "% of apps");
+  const gcats = DATA.groups.filter(g=>g!=="unknown");
+  pairedBars("groupChart",
+    gcats.map(g=>(DATA.group_labels[g]||g).split(" ")[0]),
+    gcats.map(g=>rate(v(acc,"a_"+g), v(acc,"d_"+g))),
+    gcats.map(g=>rate(v(market,"a_"+g), v(market,"d_"+g))),
+    "% denial");
+}
+
+/* ---------- table ---------- */
+const TBL_CAP = 500;
+const COLS = [
+  {key:"name", label:"Lender", txt:true, val:x=>x.name||x.lei},
+  {key:"apps", label:"Apps", val:x=>v(x.acc,"apps")},
+  {key:"orig", label:"Orig", val:x=>v(x.acc,"orig")},
+  {key:"excl", label:"Excl. 4–8", val:x=>v(x.acc,"excl_4_8")},
+  {key:"denial", label:"Denial %",
+   val:x=>rate(v(x.acc,"apps"), v(x.acc,"den"))},
+  {key:"mm", label:"MM share %", val:x=>mmShare(x.acc)},
+  {key:"mmd", label:"Δ MM vs mkt (pp)", val:x=>{
+    const l=mmShare(x.acc), m=mmShare(market);
+    return (l==null||m==null)?null:l-m; }},
+  {key:"bw", label:"B–W gap (pp)", val:x=>bwGap(x.acc)},
+  {key:"ex", label:"Exempt %", val:x=>
+    100*v(x.acc,"exempt_n")/Math.max(1,v(x.acc,"apps"))},
+];
+function renderTable(list){
+  const head=document.getElementById("tblHead");
+  head.replaceChildren();
+  for (const c of COLS){
+    const th=document.createElement("th");
+    if (c.txt) th.className="txt";
+    th.textContent=c.label;
+    if (state.sortCol===c.key){
+      const a=document.createElement("span"); a.className="arrow";
+      a.textContent=state.sortDir<0?" ▼":" ▲"; th.appendChild(a);
+    }
+    th.addEventListener("click", ()=>{
+      state.sortDir = state.sortCol===c.key?-state.sortDir:-1;
+      state.sortCol=c.key; render();
+    });
+    head.appendChild(th);
+  }
+  const cdef=COLS.find(c=>c.key===state.sortCol)||COLS[1];
+  const sorted=[...list].sort((a,b)=>{
+    const va=cdef.val(a), vb=cdef.val(b);
+    if (va==null&&vb==null) return 0;
+    if (va==null) return 1; if (vb==null) return -1;
+    return (va<vb?-1:va>vb?1:0)*state.sortDir;
+  });
+  const body=document.getElementById("tblBody");
+  body.replaceChildren();
+  for (const x of sorted.slice(0,TBL_CAP)){
+    const tr=document.createElement("tr");
+    tr.tabIndex=0;
+    if (state.selected===x.lei) tr.className="sel";
+    for (const c of COLS){
+      const td=document.createElement("td");
+      if (c.txt){ td.className="txt"; td.textContent=c.val(x);
+        td.title=x.name?x.name+" ("+x.lei+")":x.lei; }
+      else {
+        const val=c.val(x);
+        td.textContent = val==null?"·":
+          (c.key==="mmd"||c.key==="bw")
+            ?(val>0?"+":"")+fmt1(val)
+            :(c.key==="denial"||c.key==="mm"||c.key==="ex")
+              ?fmt1(val)+"%":fmt(val);
+      }
+      tr.appendChild(td);
+    }
+    const pick=()=>select(x.lei);
+    tr.addEventListener("click",pick);
+    tr.addEventListener("keydown",e=>{
+      if (e.key==="Enter"||e.key===" "){e.preventDefault();pick();}});
+    body.appendChild(tr);
+  }
+  document.getElementById("tblNote").textContent =
+    sorted.length>TBL_CAP
+      ? `Showing ${TBL_CAP} of ${sorted.length.toLocaleString()} lenders`
+        + " — refine the search or raise min applications."
+      : `${sorted.length.toLocaleString()} lenders.`;
+}
+
+/* ---------- filters / main ---------- */
+function initFilters(){
+  const states=[...new Set(DATA.rows.map(r=>r[1]).filter(Boolean))].sort();
+  const sSel=document.getElementById("fState");
+  for (const s of states){
+    const o=document.createElement("option");
+    o.value=s; o.textContent=s; sSel.appendChild(o);
+  }
+  const on=(id,ev,fn)=>document.getElementById(id)
+    .addEventListener(ev,e=>{fn(e.target.value); render();});
+  on("fState","change",vv=>{state.state=vv; state.selected=null;
+    recompute();});
+  on("fMinApps","input",vv=>state.minApps=Math.max(0,+vv||0));
+  on("fSearch","input",vv=>state.search=vv.trim());
+  document.getElementById("fReset").addEventListener("click",()=>{
+    Object.assign(state,{state:"",minApps:25,search:"",selected:null});
+    document.getElementById("fState").value="";
+    document.getElementById("fMinApps").value=25;
+    document.getElementById("fSearch").value="";
+    recompute(); render();
+  });
+}
+function render(){
+  const list=lenderList();
+  renderKPIs(list); renderScatter(list);
+  renderTable(list); renderDetail();
+}
+document.getElementById("subtitle").textContent =
+  `Modified LAR ${DATA.year} · ${Object.keys(DATA.names).length
+    .toLocaleString()} institutions`;
+document.getElementById("supn").textContent = SUP;
+document.title = `HMDA Lender Explorer — ${DATA.year}`;
+initFilters(); bindTheme(); recompute(); render();
+let rT; addEventListener("resize",()=>{
+  clearTimeout(rT); rT=setTimeout(render,150);});
+</script>
+</body>
+</html>

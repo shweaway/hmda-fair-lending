@@ -9,6 +9,13 @@ Steps (run in order, or `all`):
   python run.py analyze    --year 2025            # run all five modules
   python run.py all        --year 2025
 
+Interactive output (separate deliverables, not part of `all`):
+  python run.py explore    --year 2025            # three self-contained
+                                                  # HTML explorers
+  python run.py serve      --year 2025            # unified slice explorer
+                                                  # (local web app, any
+                                                  # filter combination)
+
 Useful flags:
   --limit N        download only the first N institutions (smoke test)
   --skip-puf       uad step: skip the appraisal-level PUF
@@ -28,6 +35,8 @@ from hmda import db as hdb               # noqa: E402
 from hmda import census as hcensus       # noqa: E402
 from hmda import report as hreport       # noqa: E402
 from hmda import uad as huad             # noqa: E402
+from hmda import explorer as hexplorer   # noqa: E402
+from hmda import serve as hserve         # noqa: E402
 from hmda.analysis import (denials, pricing, redlining, institutions,  # noqa: E402
                            valuation)
 
@@ -70,11 +79,30 @@ def cmd_analyze(a):
     print(f"\nWrote:\n  {xlsx}\n  {html}\n  {len(charts)} charts in {out/'charts'}")
 
 
+def cmd_explore(a):
+    conn, engine = hdb.connect(a.db)
+    print(f"Engine: {engine}")
+    out = Path(a.out)
+    hexplorer.build(conn, engine, a.year, out / f"explorer_{a.year}.html")
+    hexplorer.build_lenders(conn, engine, a.year,
+                            out / f"lenders_{a.year}.html")
+    hexplorer.build_loans(conn, engine, a.year,
+                          out / f"loans_{a.year}.html")
+
+
+def cmd_serve(a):
+    hserve.serve(a.db, a.year, a.port, open_browser=not a.no_browser)
+
+
 def main():
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("step", choices=["download", "load", "census", "uad",
-                                    "analyze", "all"])
+                                    "analyze", "explore", "serve", "all"])
+    p.add_argument("--port", type=int, default=8600,
+                   help="serve step: local port")
+    p.add_argument("--no-browser", action="store_true",
+                   help="serve step: don't auto-open the browser")
     p.add_argument("--skip-puf", action="store_true",
                    help="uad step: aggregate statistics only, no "
                         "appraisal-level PUF")
@@ -92,7 +120,8 @@ def main():
     Path(a.data_dir).mkdir(parents=True, exist_ok=True)
 
     steps = {"download": cmd_download, "load": cmd_load,
-             "census": cmd_census, "uad": cmd_uad, "analyze": cmd_analyze}
+             "census": cmd_census, "uad": cmd_uad, "analyze": cmd_analyze,
+             "explore": cmd_explore, "serve": cmd_serve}
     if a.step == "all":
         for s in ("download", "load", "census", "uad", "analyze"):
             print(f"\n=== {s.upper()} ===")

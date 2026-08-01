@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HMDA Loan Explorer</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --baseline: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 24px 60px; }
+header h1 { font-size: 20px; margin: 0 0 2px; }
+header .sub { color: var(--text-secondary); margin: 0 0 4px; }
+header .caveat { color: var(--muted); font-size: 12px; margin: 0; }
+.toolbar { display: flex; align-items: flex-end; gap: 12px; }
+.toolbar .grow { flex: 1; }
+button.theme { background: var(--surface-1); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px 14px;
+  align-items: flex-end; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; margin: 16px 0; }
+.filters label { display: flex; flex-direction: column; gap: 3px;
+  font-size: 11px; color: var(--text-secondary); }
+.filters select { font: inherit; font-size: 13px;
+  color: var(--text-primary); background: var(--page);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 8px; min-width: 120px; }
+.filters .reset { background: none; border: none; color: var(--series-1);
+  cursor: pointer; font: inherit; font-size: 12px; padding: 6px 2px; }
+.kpis { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.kpi { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px; min-width: 130px; }
+.kpi .label { font-size: 11px; color: var(--text-secondary); }
+.kpi .value { font-size: 24px; font-weight: 600; }
+.cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .cards2 { grid-template-columns: 1fr; } }
+.card { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.card h2 { font-size: 14px; margin: 0 0 2px; }
+.card .hint { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+svg text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif;
+  fill: var(--muted); }
+svg .vallabel { fill: var(--text-secondary);
+  font-variant-numeric: tabular-nums; }
+svg .gridline { stroke: var(--grid); stroke-width: 1; }
+svg .axisline { stroke: var(--baseline); stroke-width: 1; }
+.tooltip { position: fixed; pointer-events: none; z-index: 10;
+  display: none; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.18); max-width: 260px; }
+.tooltip .tt-val { font-weight: 600; font-size: 14px; }
+.tooltip .tt-row { color: var(--text-secondary); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 5px 8px; text-align: right; white-space: nowrap; }
+th.txt, td.txt { text-align: left; }
+td { border-top: 1px solid var(--grid);
+  font-variant-numeric: tabular-nums; }
+th { color: var(--text-secondary); font-weight: 600;
+  border-bottom: 1px solid var(--baseline); }
+.tablewrap { overflow-x: auto; }
+.tablenote { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="toolbar">
+      <div class="grow">
+        <h1>HMDA Loan Explorer</h1>
+        <p class="sub" id="subtitle"></p>
+        <p class="caveat">Denial figures cover the decision universe
+        (originated / approved-not-accepted / denied, non-business).
+        Pricing figures cover originated first-lien loans with reported
+        (non-exempt) pricing only — the "pricing visible" stat shows how
+        much of the slice that is. Rates from fewer than
+        <span id="supn"></span> records are suppressed (·).</p>
+      </div>
+      <button class="theme" id="themeBtn" type="button">Dark mode</button>
+    </div>
+  </header>
+
+  <div class="filters">
+    <label>Loan type (channel)
+      <select id="fLt"><option value="">All</option></select>
+    </label>
+    <label>Purpose
+      <select id="fPurpose"><option value="">All</option></select>
+    </label>
+    <label>Occupancy
+      <select id="fOcc"><option value="">All</option></select>
+    </label>
+    <label>Loan amount
+      <select id="fAmt"><option value="">All</option></select>
+    </label>
+    <label>Applicant group
+      <select id="fGrp"><option value="">All</option></select>
+    </label>
+    <label>Breakdown by
+      <select id="fDim">
+        <option value="amt">Loan amount</option>
+        <option value="lt">Loan type</option>
+        <option value="purpose">Purpose</option>
+        <option value="occ">Occupancy</option>
+        <option value="grp">Applicant group</option>
+      </select>
+    </label>
+    <button class="reset" id="fReset" type="button">Reset</button>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="cards2">
+    <div class="card">
+      <h2>Denial rate by loan amount</h2>
+      <p class="hint">Within the current slice.</p>
+      <svg id="amtChart" width="100%" height="300" role="img"
+       aria-label="Bar chart of denial rate by loan amount band"></svg>
+    </div>
+    <div class="card">
+      <h2>Mean rate spread by applicant group</h2>
+      <p class="hint">Originated first-lien loans with reported pricing,
+      percentage points over APOR. Value in parentheses = loan count.</p>
+      <svg id="spreadChart" width="100%" height="300" role="img"
+       aria-label="Bar chart of mean rate spread by applicant group"></svg>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Breakdown</h2>
+    <p class="hint" id="tblHint"></p>
+    <div class="tablewrap"><table>
+      <thead><tr id="tblHead"></tr></thead>
+      <tbody id="tblBody"></tbody>
+    </table></div>
+    <p class="tablenote">High-priced = rate spread ≥ 1.5 ppt over APOR.
+    HOEPA = high-cost mortgage under HOEPA. Pricing visible = share of
+    the slice's records with non-exempt pricing fields.</p>
+  </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+
+const IDX = {}; DATA.cols.forEach((c,i)=>IDX[c]=i);
+const SUP = DATA.suppress_n;
+const col = (r,n)=>r[IDX[n]];
+const fmt = n=>n==null?"·":n.toLocaleString("en-US");
+const fmt1 = n=>n==null?"·":n.toLocaleString("en-US",{maximumFractionDigits:1});
+const fmt2 = n=>n==null?"·":n.toLocaleString("en-US",{maximumFractionDigits:2});
+const state = { lt:"", purpose:"", occ:"", grp:"", amt:"", dim:"amt" };
+
+const DIMS = {
+  lt:      {label:"Loan type", key:r=>col(r,"lt"),
+            name:c=>DATA.loan_types[c]||c,
+            order:Object.keys(DATA.loan_types)},
+  purpose: {label:"Purpose", key:r=>col(r,"purpose"),
+            name:c=>DATA.purposes[c]||c,
+            order:Object.keys(DATA.purposes)},
+  occ:     {label:"Occupancy", key:r=>col(r,"occ"),
+            name:c=>DATA.occupancy[c]||c,
+            order:Object.keys(DATA.occupancy)},
+  grp:     {label:"Applicant group", key:r=>col(r,"grp"),
+            name:c=>DATA.group_labels[c]||c, order:DATA.groups},
+  amt:     {label:"Loan amount", key:r=>String(col(r,"amt")),
+            name:c=>c==="-1"?"Not reported":DATA.amt_labels[+c],
+            order:[...DATA.amt_labels.map((_,i)=>String(i)),"-1"]},
+};
+
+function filtered(){
+  return DATA.rows.filter(r=>
+    (!state.lt || col(r,"lt")===state.lt)
+    && (!state.purpose || col(r,"purpose")===state.purpose)
+    && (!state.occ || col(r,"occ")===state.occ)
+    && (!state.grp || col(r,"grp")===state.grp)
+    && (state.amt==="" || String(col(r,"amt"))===state.amt));
+}
+function accumulate(rows){
+  const m = {apps:0,den:0,orig:0,exempt_n:0,sp_n:0,sp_sum:0,hi_n:0,
+             ir_n:0,ir_sum:0,hoepa_n:0};
+  for (const r of rows) for (const k in m) m[k]+=col(r,k);
+  return m;
+}
+const rate=(n,x)=>(n==null||n<SUP)?null:100*x/n;
+const mean=(n,s)=>(n==null||n<SUP)?null:s/n;
+
+/* ---------- tooltip / theme ---------- */
+const tip=document.getElementById("tooltip");
+function showTip(x,y,lines){
+  tip.replaceChildren();
+  for (const [txt,strong] of lines){
+    const d=document.createElement("div");
+    d.className=strong?"tt-val":"tt-row";
+    d.textContent=txt; tip.appendChild(d);
+  }
+  tip.style.display="block";
+  tip.style.left=Math.min(x+14, innerWidth-tip.offsetWidth-8)+"px";
+  tip.style.top=Math.min(y+14, innerHeight-tip.offsetHeight-8)+"px";
+}
+const hideTip=()=>tip.style.display="none";
+function bindTheme(){
+  const btn=document.getElementById("themeBtn");
+  const cur=()=>document.documentElement.dataset.theme
+    || (matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+  const sync=()=>btn.textContent=cur()==="dark"?"Light mode":"Dark mode";
+  btn.addEventListener("click",()=>{
+    document.documentElement.dataset.theme=cur()==="dark"?"light":"dark";
+    sync();});
+  sync();
+}
+
+/* ---------- KPIs ---------- */
+function renderKPIs(rows){
+  const m=accumulate(rows);
+  const items=[
+    ["Applications", fmt(m.apps)],
+    ["Denial rate", rate(m.apps,m.den)==null?"·":
+      fmt1(rate(m.apps,m.den))+"%"],
+    ["Originations", fmt(m.orig)],
+    ["Mean rate spread", mean(m.sp_n,m.sp_sum)==null?"·":
+      fmt2(mean(m.sp_n,m.sp_sum))+" ppt"],
+    ["High-priced share", rate(m.sp_n,m.hi_n)==null?"·":
+      fmt1(rate(m.sp_n,m.hi_n))+"%"],
+    ["Mean note rate", mean(m.ir_n,m.ir_sum)==null?"·":
+      fmt2(mean(m.ir_n,m.ir_sum))+"%"],
+    ["Pricing visible", m.apps?
+      fmt1(100*(1 - m.exempt_n/m.apps))+"%":"·"],
+  ];
+  const el=document.getElementById("kpis");
+  el.replaceChildren();
+  for (const [label,value] of items){
+    const k=document.createElement("div"); k.className="kpi";
+    const l=document.createElement("div"); l.className="label";
+    l.textContent=label;
+    const v=document.createElement("div"); v.className="value";
+    v.textContent=value;
+    k.append(l,v); el.appendChild(k);
+  }
+}
+
+/* ---------- generic column chart ---------- */
+function columns(svgId, items, unit){
+  /* items: [{label, value, n, extra}] — value null = suppressed */
+  const svg=document.getElementById(svgId);
+  svg.replaceChildren();
+  const W=svg.clientWidth||560, H=300, M={l:44,r:10,t:10,b:56};
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const NS=svg.namespaceURI;
+  const vals=items.map(x=>x.value).filter(x=>x!=null);
+  if (!vals.length){
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",W/2); t.setAttribute("y",H/2);
+    t.setAttribute("text-anchor","middle");
+    t.textContent="No data for the current slice.";
+    svg.appendChild(t); return;
+  }
+  const raw=Math.max(...vals);
+  const ymax=raw<=1 ? Math.ceil(raw*10)/10 || 0.1
+                    : Math.max(5, Math.ceil(raw/5)*5);
+  const Y=v=>H-M.b - v/ymax*(H-M.t-M.b);
+  for (let g=0; g<=4; g++){
+    const gv=ymax*g/4;
+    const ln=document.createElementNS(NS,"line");
+    ln.setAttribute("class", g===0?"axisline":"gridline");
+    ln.setAttribute("x1",M.l); ln.setAttribute("x2",W-M.r);
+    ln.setAttribute("y1",Y(gv)); ln.setAttribute("y2",Y(gv));
+    svg.appendChild(ln);
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",M.l-5); t.setAttribute("y",Y(gv)+4);
+    t.setAttribute("text-anchor","end");
+    t.textContent=raw<=1?fmt2(gv):fmt1(gv);
+    svg.appendChild(t);
+  }
+  const slot=(W-M.l-M.r)/items.length;
+  const bw=Math.min(24, slot*0.5);
+  items.forEach((x,i)=>{
+    const cx=M.l+(i+0.5)*slot;
+    const lbl=document.createElementNS(NS,"text");
+    lbl.setAttribute("x",cx); lbl.setAttribute("y",H-M.b+14);
+    lbl.setAttribute("text-anchor","end");
+    lbl.setAttribute("transform",`rotate(-30 ${cx} ${H-M.b+14})`);
+    lbl.textContent=x.label;
+    svg.appendChild(lbl);
+    if (x.value==null){
+      const s=document.createElementNS(NS,"text");
+      s.setAttribute("x",cx); s.setAttribute("y",Y(0)-5);
+      s.setAttribute("text-anchor","middle"); s.textContent="·";
+      svg.appendChild(s); return;
+    }
+    const x0=cx-bw/2, y0=Y(x.value), y1=Y(0), rr=Math.min(4,bw/2);
+    const p=document.createElementNS(NS,"path");
+    p.setAttribute("d",`M ${x0} ${y1} L ${x0} ${y0+rr}
+      Q ${x0} ${y0} ${x0+rr} ${y0} L ${x0+bw-rr} ${y0}
+      Q ${x0+bw} ${y0} ${x0+bw} ${y0+rr} L ${x0+bw} ${y1} Z`);
+    p.setAttribute("fill","var(--series-1)");
+    p.addEventListener("pointermove", e=>showTip(e.clientX,e.clientY,[
+      [(raw<=1?fmt2(x.value):fmt1(x.value))+unit, true],
+      [x.label+(x.n!=null?" · "+fmt(x.n)+" records":""), false]]));
+    p.addEventListener("pointerleave", hideTip);
+    svg.appendChild(p);
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("class","vallabel");
+    t.setAttribute("x",cx); t.setAttribute("y",y0-5);
+    t.setAttribute("text-anchor","middle");
+    t.textContent=raw<=1?fmt2(x.value):fmt1(x.value);
+    svg.appendChild(t);
+  });
+}
+
+function byDim(rows, dimKey){
+  const dim=DIMS[dimKey];
+  const acc=new Map();
+  for (const r of rows){
+    const k=dim.key(r);
+    let m=acc.get(k);
+    if (!m){ m={apps:0,den:0,orig:0,exempt_n:0,sp_n:0,sp_sum:0,hi_n:0,
+                ir_n:0,ir_sum:0,hoepa_n:0}; acc.set(k,m); }
+    for (const kk in m) m[kk]+=col(r,kk);
+  }
+  return dim.order.filter(c=>acc.has(c))
+    .map(c=>({code:c, name:dim.name(c), m:acc.get(c)}));
+}
+
+function renderCharts(rows){
+  columns("amtChart",
+    byDim(rows,"amt").map(x=>({label:x.name,
+      value:rate(x.m.apps,x.m.den), n:x.m.apps})), "% denied");
+  columns("spreadChart",
+    byDim(rows,"grp").filter(x=>x.code!=="unknown")
+      .map(x=>({label:(DATA.group_labels[x.code]||x.code).split(" ")[0],
+        value:mean(x.m.sp_n,x.m.sp_sum), n:x.m.sp_n})), " ppt");
+}
+
+/* ---------- breakdown table ---------- */
+function renderTable(rows){
+  const dim=DIMS[state.dim];
+  document.getElementById("tblHint").textContent =
+    "Rows: "+dim.label+" — within the current slice. Change the "
+    + "“Breakdown by” control to pivot.";
+  const total=accumulate(rows);
+  const heads=[[dim.label,true],["Apps",false],["Share %",false],
+    ["Denial %",false],["Orig %",false],["Mean spread (ppt)",false],
+    ["High-priced %",false],["HOEPA",false],["Mean rate %",false],
+    ["Pricing visible %",false]];
+  const head=document.getElementById("tblHead");
+  head.replaceChildren();
+  for (const [label,txt] of heads){
+    const th=document.createElement("th");
+    if (txt) th.className="txt";
+    th.textContent=label; head.appendChild(th);
+  }
+  const body=document.getElementById("tblBody");
+  body.replaceChildren();
+  const mk=(m)=>[
+    fmt(m.apps),
+    total.apps?fmt1(100*m.apps/total.apps)+"%":"·",
+    rate(m.apps,m.den)==null?"·":fmt1(rate(m.apps,m.den))+"%",
+    rate(m.apps,m.orig)==null?"·":fmt1(rate(m.apps,m.orig))+"%",
+    mean(m.sp_n,m.sp_sum)==null?"·":fmt2(mean(m.sp_n,m.sp_sum)),
+    rate(m.sp_n,m.hi_n)==null?"·":fmt1(rate(m.sp_n,m.hi_n))+"%",
+    fmt(m.hoepa_n),
+    mean(m.ir_n,m.ir_sum)==null?"·":fmt2(mean(m.ir_n,m.ir_sum)),
+    m.apps?fmt1(100*(1-m.exempt_n/m.apps))+"%":"·"];
+  for (const x of byDim(rows, state.dim)){
+    const tr=document.createElement("tr");
+    const td0=document.createElement("td");
+    td0.className="txt"; td0.textContent=x.name; tr.appendChild(td0);
+    for (const cell of mk(x.m)){
+      const td=document.createElement("td");
+      td.textContent=cell; tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+  const tr=document.createElement("tr");
+  const td0=document.createElement("td"); td0.className="txt";
+  td0.textContent="— ALL —"; td0.style.fontWeight="600";
+  tr.appendChild(td0);
+  for (const cell of mk(total)){
+    const td=document.createElement("td");
+    td.style.fontWeight="600"; td.textContent=cell; tr.appendChild(td);
+  }
+  body.appendChild(tr);
+}
+
+/* ---------- filters / main ---------- */
+function fill(id, map, order){
+  const sel=document.getElementById(id);
+  for (const c of order){
+    const o=document.createElement("option");
+    o.value=c; o.textContent=map(c); sel.appendChild(o);
+  }
+}
+function initFilters(){
+  fill("fLt", c=>DATA.loan_types[c]||c, Object.keys(DATA.loan_types));
+  fill("fPurpose", c=>DATA.purposes[c]||c, Object.keys(DATA.purposes));
+  fill("fOcc", c=>DATA.occupancy[c]||c, Object.keys(DATA.occupancy));
+  fill("fAmt", c=>DIMS.amt.name(c), DIMS.amt.order);
+  fill("fGrp", c=>DATA.group_labels[c]||c, DATA.groups);
+  const on=(id,fn)=>document.getElementById(id)
+    .addEventListener("change",e=>{fn(e.target.value); render();});
+  on("fLt",v=>state.lt=v); on("fPurpose",v=>state.purpose=v);
+  on("fOcc",v=>state.occ=v); on("fAmt",v=>state.amt=v);
+  on("fGrp",v=>state.grp=v); on("fDim",v=>state.dim=v);
+  document.getElementById("fReset").addEventListener("click",()=>{
+    Object.assign(state,{lt:"",purpose:"",occ:"",grp:"",amt:"",dim:"amt"});
+    for (const id of ["fLt","fPurpose","fOcc","fAmt","fGrp"])
+      document.getElementById(id).value="";
+    document.getElementById("fDim").value="amt";
+    render();
+  });
+}
+function render(){
+  const rows=filtered();
+  renderKPIs(rows); renderCharts(rows); renderTable(rows);
+}
+document.getElementById("subtitle").textContent =
+  `Modified LAR ${DATA.year} · loan type × purpose × amount × occupancy`
+  + ` × applicant group`;
+document.getElementById("supn").textContent = SUP;
+document.title = `HMDA Loan Explorer — ${DATA.year}`;
+initFilters(); bindTheme(); render();
+let rT; addEventListener("resize",()=>{
+  clearTimeout(rT); rT=setTimeout(render,150);});
+</script>
+</body>
+</html>
