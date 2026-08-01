@@ -183,13 +183,31 @@ tbody tr:focus-visible { outline: 2px solid var(--series-1);
     <p class="hint">Click a column to sort; click a row to inspect.
     MM share = share of applications from majority-minority (50%+) tracts;
     Δ = lender minus market (pp). B–W gap = Black denial rate minus White
-    denial rate (pp). Exempt % = records with EGRRCPA-exempt pricing.</p>
+    denial rate (pp). Exempt % = records with EGRRCPA-exempt pricing.
+    Excl. 4–8 = withdrawn, closed-incomplete, purchased, and preapproval
+    records at this institution — not counted in Apps/Orig/Denial % (see
+    scope note below).</p>
     <div class="tablewrap"><table>
       <thead><tr id="tblHead"></tr></thead>
       <tbody id="tblBody"></tbody>
     </table></div>
     <p class="tablenote" id="tblNote"></p>
   </div>
+
+  <p class="tablenote" id="scopeNote">
+    <strong>Scope note:</strong> Apps, Orig, and Denial % on this page cover
+    only consumer-purpose records where the institution reached a credit
+    decision — HMDA action-taken codes 1 (loan originated), 2 (approved but
+    not accepted), and 3 (application denied). Applications withdrawn by
+    the applicant (4), files closed for incompleteness (5), loans the
+    institution purchased rather than originated (6), and preapproval
+    requests (7, 8) are excluded from those figures; they are counted
+    separately in the "Excl. 4–8" column. Business/commercial-purpose
+    records are excluded entirely. This mirrors the standard denial-rate
+    methodology used in CFPB and academic HMDA research, but it means these
+    totals will read lower than a raw count of every record an institution
+    reported.
+  </p>
 </div>
 <div class="tooltip" id="tooltip"></div>
 
@@ -560,6 +578,7 @@ const COLS = [
   {key:"name", label:"Lender", txt:true, val:x=>x.name||x.lei},
   {key:"apps", label:"Apps", val:x=>v(x.acc,"apps")},
   {key:"orig", label:"Orig", val:x=>v(x.acc,"orig")},
+  {key:"excl", label:"Excl. 4–8", val:x=>v(x.acc,"excl_4_8")},
   {key:"denial", label:"Denial %",
    val:x=>rate(v(x.acc,"apps"), v(x.acc,"den"))},
   {key:"mm", label:"MM share %", val:x=>mmShare(x.acc)},

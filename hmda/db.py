@@ -147,11 +147,24 @@ def _group_re_expr() -> str:
     """
 
 
-def _load_files_duckdb(conn, raw: Path) -> tuple[int, list]:
+def _count_source_lines(fp: Path) -> int:
+    """Newline count of a raw file -- cheap proxy for its row count."""
+    n = 0
+    with fp.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            n += chunk.count(b"\n")
+    return n
+
+
+def _load_files_duckdb(conn, raw: Path) -> tuple[int, list, int]:
     """Bulk-load every raw file in `raw` via DuckDB's native CSV reader.
 
-    Returns (total_rows, per_lei) where per_lei is a list of
+    Returns (total_rows, per_lei, n_skipped) where per_lei is a list of
     (lei, n_rows, n_exempt) tuples for building the institutions table.
+    `strict_mode=false` lets the reader tolerate ragged/malformed lines
+    instead of aborting the whole load, but it does so silently -- so
+    n_skipped is recovered by diffing each file's parsed row count against
+    a raw newline count of that file.
     """
     glob_pat = str(raw / "*.txt").replace("\\", "/")
     col_list_sql = ", ".join(f"'{c}': 'VARCHAR'" for c in COLUMNS)
@@ -165,13 +178,20 @@ def _load_files_duckdb(conn, raw: Path) -> tuple[int, list]:
     # still stores the raw data value (matching the original row-by-row
     # loader exactly), but institution roster/name lookups must key off
     # the filename, or names silently go missing for those institutions.
+    # ignore_errors=true is required, not optional: strict_mode=false only
+    # relaxes *type* mismatches. A row with the wrong field count still
+    # raises and aborts the ENTIRE read -- every institution's data, not
+    # just the offending file -- unless ignore_errors is also set. With it,
+    # DuckDB drops the bad row and keeps going; _count_source_lines() below
+    # is what makes that drop visible instead of silent.
     conn.execute(f"""
         CREATE OR REPLACE TEMP TABLE _raw_lar AS
         SELECT *, regexp_extract(replace(filename, chr(92), '/'), '([^/]+)\\.txt$', 1) AS _file_lei
         FROM read_csv(
             '{glob_pat}',
             delim='|', header=false, columns={{{col_list_sql}}},
-            quote='', escape='', strict_mode=false, filename=true
+            quote='', escape='', strict_mode=false, ignore_errors=true,
+            filename=true
         )
     """)
     raw_rows = conn.execute("SELECT COUNT(*) FROM _raw_lar").fetchone()[0]
@@ -208,7 +228,24 @@ def _load_files_duckdb(conn, raw: Path) -> tuple[int, list]:
     """).fetchall()
     conn.execute("DROP TABLE _raw_lar")
 
-    return raw_rows, per_lei
+    n_skipped = 0
+    for lei, n_rows, _ in per_lei:
+        fp = raw / f"{lei}.txt"
+        if not fp.exists():
+            continue
+        expected = _count_source_lines(fp)
+        diff = expected - n_rows
+        if diff != 0:
+            n_skipped += diff
+            print(f"  WARNING: {lei} -- parsed {n_rows:,} rows but source "
+                  f"file has {expected:,} lines ({diff:+,} unaccounted)",
+                  flush=True)
+    if n_skipped:
+        print(f"  WARNING: {n_skipped:,} total rows unaccounted for across "
+              f"all institutions (ragged/malformed lines silently dropped "
+              f"by the CSV reader)", flush=True)
+
+    return raw_rows, per_lei, n_skipped
 
 
 def load_files(db_path: str | Path, data_dir: str | Path = "data",
@@ -229,8 +266,9 @@ def load_files(db_path: str | Path, data_dir: str | Path = "data",
         names = {f["lei"]: f.get("name", "")
                  for f in json.loads(roster.read_text(encoding="utf-8"))}
 
+    total_skipped = 0
     if engine == "duckdb":
-        total, per_lei = _load_files_duckdb(conn, raw)
+        total, per_lei, total_skipped = _load_files_duckdb(conn, raw)
         inst_rows = [
             (lei, names.get(lei, ""), str(year), n_rows,
              (n_exempt / n_rows) if n_rows else None)
@@ -244,7 +282,7 @@ def load_files(db_path: str | Path, data_dir: str | Path = "data",
         inst_rows = []
         for i, fp in enumerate(files, 1):
             lei = fp.stem
-            buf, n_rows, n_exempt = [], 0, 0
+            buf, n_rows, n_exempt, n_skipped = [], 0, 0, 0
             with fp.open(encoding="utf-8", errors="replace") as f:
                 reader = csv.reader(f, delimiter="|")
                 for row in reader:
@@ -252,7 +290,7 @@ def load_files(db_path: str | Path, data_dir: str | Path = "data",
                         if row and row[0] == "activity_year":  # header row
                             continue
                         if len(row) > 1:  # malformed; skip but keep going
-                            continue
+                            n_skipped += 1
                         continue
                     full = _derive_row(row)
                     buf.append(full)
@@ -264,6 +302,10 @@ def load_files(db_path: str | Path, data_dir: str | Path = "data",
             if buf:
                 conn.executemany(insert, buf)
             total += n_rows
+            total_skipped += n_skipped
+            if n_skipped:
+                print(f"  WARNING: {lei} -- skipped {n_skipped:,} malformed "
+                      f"rows (field count != {N_COLUMNS})", flush=True)
             inst_rows.append((lei, names.get(lei, ""), str(year), n_rows,
                               (n_exempt / n_rows) if n_rows else None))
             if i % 200 == 0 or i == len(files):
@@ -271,6 +313,9 @@ def load_files(db_path: str | Path, data_dir: str | Path = "data",
                       f"({total:,} rows)", flush=True)
                 if engine == "sqlite":
                     conn.commit()
+        if total_skipped:
+            print(f"  WARNING: {total_skipped:,} malformed rows skipped "
+                  f"across all institutions during ingestion", flush=True)
 
     conn.execute("DELETE FROM institutions WHERE activity_year = ?", [str(year)])
     conn.executemany(
@@ -289,8 +334,9 @@ def load_files(db_path: str | Path, data_dir: str | Path = "data",
         ):
             conn.execute(stmt)
         conn.commit()
-    print(f"Done: {total:,} LAR rows from {len(files)} institutions "
-          f"-> {db_path} [{engine}]")
+    skip_note = f", {total_skipped:,} rows skipped" if total_skipped else ""
+    print(f"Done: {total:,} LAR rows from {len(files)} institutions"
+          f"{skip_note} -> {db_path} [{engine}]")
     conn.close()
 
 

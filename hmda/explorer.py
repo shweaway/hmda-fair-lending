@@ -178,6 +178,18 @@ def build_lenders(conn, engine: str, year: int,
         WHERE l.activity_year = ? AND {DEC}
         GROUP BY l.lei, l.state_code""", [str(year)])
 
+    # Records outside the apps/orig/den scope above: withdrawn (4), closed
+    # for incompleteness (5), purchased loans (6), and preapproval requests
+    # (7,8). Reported alongside the decisioned counts so the page shows how
+    # much volume the DEC scope leaves out, instead of hiding it silently.
+    excl = _q(conn, engine, """
+        SELECT lei, state_code AS state, COUNT(*) AS excl_4_8
+        FROM lar
+        WHERE activity_year = ? AND action_taken IN ('4','5','6','7','8')
+        GROUP BY lei, state_code""", [str(year)])
+    df = df.merge(excl, on=["lei", "state"], how="left")
+    df["excl_4_8"] = df["excl_4_8"].fillna(0)
+
     names = {}
     if _table_exists(conn, engine, "institutions"):
         nm = _q(conn, engine,
@@ -185,14 +197,16 @@ def build_lenders(conn, engine: str, year: int,
                 [str(year)])
         names = {r.lei: (r.name or "") for r in nm.itertuples(index=False)}
 
-    cols = (["lei", "state", "apps", "orig", "den", "vol_mn", "exempt_n"]
+    cols = (["lei", "state", "apps", "orig", "den", "vol_mn", "exempt_n",
+             "excl_4_8"]
             + [f"{p}_{g}" for g in GROUP_ORDER for p in ("a", "d")]
             + [f"b{p}_{i}" for i in range(len(BANDS)) for p in ("a", "d")]
             + [f"q{p}_{qn}" for qn in QUINTILES for p in ("a", "d")])
     rows = []
     for r in df.itertuples(index=False):
         row = [r.lei, r.state or "", int(r.apps), int(r.orig), int(r.den),
-               round(float(r.vol_mn or 0), 2), int(r.exempt_n)]
+               round(float(r.vol_mn or 0), 2), int(r.exempt_n),
+               int(r.excl_4_8)]
         for g in GROUP_ORDER:
             row += [int(getattr(r, f"a_{g}")), int(getattr(r, f"d_{g}"))]
         for i in range(len(BANDS)):
