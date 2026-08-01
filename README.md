@@ -48,6 +48,12 @@ python run.py analyze  --year 2025     # -> outputs/hmda_2025_analysis.xlsx + su
 
 Notes:
 
+- **Ingestion is now crash-safe and logged.** `load` tolerates ragged or
+  malformed lines in a raw file instead of aborting the whole load (this
+  used to kill ingestion for every institution over a single bad row).
+  Any row that gets dropped is now counted and reported — per
+  institution and as a total — instead of disappearing silently, so a
+  row-count mismatch against the download manifest is easy to catch.
 - **Resumable.** Stop the download anytime; rerunning skips finished files.
 - **Smoke test first:** `python run.py download --year 2025 --limit 50`
   then `load` + `analyze` to see the whole thing work in minutes.
@@ -56,7 +62,7 @@ Notes:
 - Optional: set a free Census API key (`setx CENSUS_API_KEY yourkey`)
   if the census step gets rate-limited.
 
-## Interactive explorers (`analyst-explorer` branch)
+## Interactive explorers
 
 For pattern-hunting that a static workbook can't do:
 
@@ -65,7 +71,10 @@ python run.py explore --year 2025
 ```
 
 writes three **single self-contained HTML files** (no server, no
-internet, shareable by email) to `outputs/`:
+internet, shareable by email) to `outputs/`. The DuckDB path loads the
+full national file (~13.5M rows) in under 20 minutes via DuckDB's native
+bulk CSV reader instead of row-by-row Python parsing (~150x faster);
+SQLite is a stdlib fallback if DuckDB isn't installed.
 
 ### `explorer_{year}.html` — tracts × demography
 
@@ -94,6 +103,14 @@ the current state scope):
 - Click a lender for a drill-down: side-by-side lender-vs-market bars
   for application share by tract minority band and denial rate by
   applicant group, plus a fact sheet.
+- **Scope note:** Apps/Orig/Denial % cover only consumer-purpose records
+  where the institution reached a credit decision — action-taken codes 1
+  (originated), 2 (approved, not accepted), 3 (denied). Withdrawn
+  applications, files closed for incompleteness, purchased loans, and
+  preapproval requests (codes 4–8) are excluded from those figures and
+  broken out separately in the **Excl. 4–8** column, so a lender's total
+  reported record count is never silently smaller than what the page
+  shows. The page states this scope on-page as well.
 
 ### `loans_{year}.html` — loan parameters × pricing
 
@@ -109,6 +126,19 @@ applicant group; every stat, chart, and table follows the slice:
   occupancy, group) and read denial, origination, spread, high-priced,
   HOEPA, and pricing-visibility per row. Pricing stats cover originated
   first-lien loans with reported pricing, matching the `pricing` module.
+
+### Publishing to GitHub Pages (`docs/`)
+
+`docs/` holds a **committed snapshot** of the three explorers above plus
+a landing page (`docs/index.html`), so GitHub Pages can serve them
+directly with no build step. It is not regenerated automatically — after
+running `python run.py explore --year YEAR`, copy the fresh
+`outputs/explorer_{year}.html`, `lenders_{year}.html`, and
+`loans_{year}.html` into `docs/` (matching the existing filenames) and
+commit them. If you change `hmda/explorer.py` or a `*_template.html`
+(e.g. adding a column or a scope disclaimer), the live Pages site won't
+reflect it until you rerun `explore` and recommit `docs/` — the code
+change alone doesn't update the published files.
 
 ### `run.py serve` — unified slice explorer (every filter combined)
 
